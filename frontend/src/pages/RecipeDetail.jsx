@@ -8,7 +8,9 @@ import {
   Calculator,
   Package,
   Clock,
-  Gear
+  Gear,
+  FilePdf,
+  DownloadSimple
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -200,6 +202,12 @@ const RecipeDetail = () => {
     );
   };
 
+  const handleExportPdf = () => {
+    const pdfUrl = `${API}/recipes/${id}/pdf`;
+    window.open(pdfUrl, '_blank');
+    toast.success("Génération du PDF en cours...");
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64" data-testid="recipe-detail-loading">
@@ -224,22 +232,32 @@ const RecipeDetail = () => {
   return (
     <div className="fade-in" data-testid="recipe-detail-page">
       {/* Page Header */}
-      <div className="flex items-center gap-4 mb-8">
-        <Button 
-          variant="outline" 
-          size="icon"
-          onClick={() => navigate("/recipes")}
-          data-testid="back-to-recipes-btn"
-        >
-          <ArrowLeft size={20} />
-        </Button>
-        <div>
-          <h1 className="page-title" data-testid="recipe-detail-title">{recipe.name}</h1>
-          <p className="page-subtitle">
-            Produit: {recipe.output_quantity} {recipe.output_unit}
-            {recipe.description && ` • ${recipe.description}`}
-          </p>
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-4">
+          <Button 
+            variant="outline" 
+            size="icon"
+            onClick={() => navigate("/recipes")}
+            data-testid="back-to-recipes-btn"
+          >
+            <ArrowLeft size={20} />
+          </Button>
+          <div>
+            <h1 className="page-title" data-testid="recipe-detail-title">{recipe.name}</h1>
+            <p className="page-subtitle">
+              Produit: {recipe.output_quantity} {recipe.output_unit}
+              {recipe.description && ` • ${recipe.description}`}
+            </p>
+          </div>
         </div>
+        <Button 
+          onClick={handleExportPdf}
+          className="bg-[#EF4444] hover:bg-[#DC2626]"
+          data-testid="export-pdf-btn"
+        >
+          <FilePdf size={20} className="mr-2" />
+          Exporter PDF
+        </Button>
       </div>
 
       {/* Cost Summary Cards */}

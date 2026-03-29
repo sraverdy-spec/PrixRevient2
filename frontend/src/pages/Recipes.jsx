@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { Plus, Eye, Pencil, Trash, CookingPot, Calculator } from "@phosphor-icons/react";
+import { Plus, Eye, Pencil, Trash, CookingPot, Calculator, UploadSimple, DownloadSimple, FileText } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,10 +45,13 @@ const OUTPUT_UNITS = [
 
 const Recipes = () => {
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [recipeCosts, setRecipeCosts] = useState({});
   const [formData, setFormData] = useState({
@@ -154,6 +157,45 @@ const Recipes = () => {
     setIsDialogOpen(true);
   };
 
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setImporting(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await axios.post(`${API}/recipes/import-csv`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (response.data.success) {
+        toast.success(`${response.data.imported_count} recette(s) importée(s) avec succès`);
+        if (response.data.errors.length > 0) {
+          toast.warning(`${response.data.errors.length} erreur(s) lors de l'import`);
+        }
+        fetchRecipes();
+      } else {
+        toast.error("Erreur lors de l'import");
+      }
+      setIsImportDialogOpen(false);
+    } catch (error) {
+      const message = error.response?.data?.detail || "Erreur lors de l'import du fichier";
+      toast.error(message);
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const downloadTemplate = () => {
+    window.open(`${API}/recipes/csv-template`, '_blank');
+    toast.success("Téléchargement du modèle...");
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64" data-testid="recipes-loading">
@@ -170,14 +212,24 @@ const Recipes = () => {
           <h1 className="page-title" data-testid="recipes-title">Recettes de Production</h1>
           <p className="page-subtitle">Définissez vos recettes et calculez les prix de revient</p>
         </div>
-        <Button 
-          onClick={openNewDialog}
-          className="bg-[#002FA7] hover:bg-[#002482]"
-          data-testid="add-recipe-btn"
-        >
-          <Plus size={20} className="mr-2" />
-          Nouvelle recette
-        </Button>
+        <div className="flex gap-3">
+          <Button 
+            variant="outline"
+            onClick={() => setIsImportDialogOpen(true)}
+            data-testid="import-csv-btn"
+          >
+            <UploadSimple size={20} className="mr-2" />
+            Importer CSV
+          </Button>
+          <Button 
+            onClick={openNewDialog}
+            className="bg-[#002FA7] hover:bg-[#002482]"
+            data-testid="add-recipe-btn"
+          >
+            <Plus size={20} className="mr-2" />
+            Nouvelle recette
+          </Button>
+        </div>
       </div>
 
       {/* Recipes Grid */}
@@ -185,15 +237,25 @@ const Recipes = () => {
         <div className="empty-state bg-white border border-zinc-200 rounded-lg" data-testid="no-recipes-message">
           <CookingPot size={64} className="mx-auto mb-4 text-zinc-300" />
           <p className="empty-state-title">Aucune recette</p>
-          <p className="empty-state-text">Créez votre première recette de production</p>
-          <Button 
-            onClick={openNewDialog}
-            className="bg-[#002FA7] hover:bg-[#002482]"
-            data-testid="add-first-recipe-btn"
-          >
-            <Plus size={20} className="mr-2" />
-            Créer une recette
-          </Button>
+          <p className="empty-state-text">Créez votre première recette de production ou importez depuis un CSV</p>
+          <div className="flex gap-3 justify-center">
+            <Button 
+              variant="outline"
+              onClick={() => setIsImportDialogOpen(true)}
+              data-testid="import-first-csv-btn"
+            >
+              <UploadSimple size={20} className="mr-2" />
+              Importer CSV
+            </Button>
+            <Button 
+              onClick={openNewDialog}
+              className="bg-[#002FA7] hover:bg-[#002482]"
+              data-testid="add-first-recipe-btn"
+            >
+              <Plus size={20} className="mr-2" />
+              Créer une recette
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="recipes-grid">
@@ -375,6 +437,73 @@ const Recipes = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import CSV Dialog */}
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]" data-testid="import-csv-dialog">
+          <DialogHeader>
+            <DialogTitle>Importer des recettes depuis un fichier CSV</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <FileText size={24} className="text-blue-600 mt-0.5" />
+                <div>
+                  <p className="font-medium text-blue-900">Format du fichier CSV</p>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Colonnes attendues: name, description, output_quantity, output_unit, 
+                    ingredient_name, ingredient_quantity, ingredient_unit, ingredient_price, 
+                    labor_description, labor_hours, labor_rate
+                  </p>
+                  <p className="text-sm text-blue-600 mt-2">
+                    Séparateur: point-virgule (;) ou virgule (,)
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-center">
+              <Button 
+                variant="outline" 
+                onClick={downloadTemplate}
+                data-testid="download-template-btn"
+              >
+                <DownloadSimple size={18} className="mr-2" />
+                Télécharger le modèle CSV
+              </Button>
+            </div>
+
+            <div className="border-2 border-dashed border-zinc-300 rounded-lg p-8 text-center">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="csv-upload"
+                data-testid="csv-file-input"
+              />
+              <UploadSimple size={40} className="mx-auto mb-3 text-zinc-400" />
+              <p className="text-zinc-600 mb-3">
+                {importing ? "Import en cours..." : "Glissez votre fichier CSV ici ou"}
+              </p>
+              <Button 
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importing}
+                data-testid="select-csv-btn"
+              >
+                {importing ? "Import en cours..." : "Sélectionner un fichier"}
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>
+              Fermer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

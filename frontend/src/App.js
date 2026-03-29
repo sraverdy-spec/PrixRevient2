@@ -1,26 +1,89 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import Dashboard from "@/pages/Dashboard";
 import Materials from "@/pages/Materials";
 import Recipes from "@/pages/Recipes";
 import RecipeDetail from "@/pages/RecipeDetail";
 import Overheads from "@/pages/Overheads";
+import Login from "@/pages/Login";
+
+// Protected Route Component
+const ProtectedRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#FAFAFA]">
+        <div className="text-zinc-500">Chargement...</div>
+      </div>
+    );
+  }
+
+  if (!user || user === false) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+};
+
+// Public Route (redirect if authenticated)
+const PublicRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#FAFAFA]">
+        <div className="text-zinc-500">Chargement...</div>
+      </div>
+    );
+  }
+
+  if (user && user !== false) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+};
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Dashboard />} />
+        <Route path="materials" element={<Materials />} />
+        <Route path="recipes" element={<Recipes />} />
+        <Route path="recipes/:id" element={<RecipeDetail />} />
+        <Route path="overheads" element={<Overheads />} />
+      </Route>
+    </Routes>
+  );
+}
 
 function App() {
   return (
     <div className="App">
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="materials" element={<Materials />} />
-            <Route path="recipes" element={<Recipes />} />
-            <Route path="recipes/:id" element={<RecipeDetail />} />
-            <Route path="overheads" element={<Overheads />} />
-          </Route>
-        </Routes>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
       </BrowserRouter>
       <Toaster position="top-right" />
     </div>
