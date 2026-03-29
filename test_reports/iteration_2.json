@@ -1,0 +1,74 @@
+{
+  "summary": "Iteration 2 testing completed successfully. All 3 new features/fixes verified: (1) Sidebar icons visible when collapsed - BUG FIX VERIFIED, (2) BOM CSV import with sub_recipe column - WORKING, (3) Import Center with API REST, SFTP, and History tabs - WORKING. All 48 backend tests passed (34 existing + 14 new). All frontend UI tests passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dialog components", "issues": ["Console warning: Missing Description or aria-describedby for DialogContent - accessibility improvement recommended"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_api.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/pytest_results_iter2.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py"
+  ],
+  "success_rate": {
+    "backend": "100% (48/48 tests passed)",
+    "frontend": "100% (all UI flows working)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@example.com",
+    "admin_password": "Admin123!"
+  },
+  "seed_data_creation": "Test data created during backend tests (TEST_ prefixed) is cleaned up automatically",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 3 new features working correctly: (1) Sidebar collapse shows icons via CSS .sidebar.collapsed rules, (2) BOM CSV import at POST /api/recipes/import-bom-csv supports sub_recipe column format 'RecipeName:quantity:unit', (3) Import Center at /import-center has 3 tabs - API REST for manual uploads, SFTP/Dossier for watch directory scanning, Historique for import logs. Dashboard shows 12 materials, 5 recipes. Recipe detail shows sub-recipes section with amber background.",
+  "features_tested": {
+    "sidebar_collapse_fix": {
+      "status": "PASS",
+      "details": "Icons visible in collapsed state, CSS class .sidebar.collapsed applied correctly, toggle button works"
+    },
+    "bom_csv_import": {
+      "template_endpoint": "PASS - GET /api/recipes/bom-csv-template returns CSV with sub_recipe column",
+      "import_endpoint": "PASS - POST /api/recipes/import-bom-csv imports intermediate and final recipes",
+      "ui_dialog": "PASS - Import dialog opens from BOM Tree page with instructions"
+    },
+    "import_center": {
+      "api_tab": "PASS - Shows import type selector, file upload, API documentation",
+      "sftp_tab": "PASS - Shows watch directory /app/backend/import_watch, pending/processed counts, scan button",
+      "history_tab": "PASS - Shows import log entries with timestamps and results"
+    },
+    "auto_import_api": {
+      "materials": "PASS - POST /api/import/auto?import_type=materials",
+      "recipes": "PASS - POST /api/import/auto?import_type=recipes",
+      "bom": "PASS - POST /api/import/auto?import_type=bom"
+    },
+    "sftp_scan": {
+      "endpoint": "PASS - POST /api/import/sftp-scan scans watch directory"
+    },
+    "import_status": {
+      "endpoint": "PASS - GET /api/import/status returns config and history"
+    },
+    "dashboard": {
+      "stats": "PASS - Shows 12 materials, 5 recipes, 1 overhead, 5.49€ avg cost"
+    },
+    "recipe_detail": {
+      "sub_recipes_section": "PASS - Shows 'Articles semi-finis (sous-recettes)' with amber background",
+      "labor_costs": "PASS - Shows Preparation and Cuisson with hours and rates",
+      "cost_breakdown": "PASS - Shows materials, labor, overhead costs"
+    },
+    "materials_page": {
+      "freinte_column": "PASS - Shows freinte % in red for materials with waste percentage"
+    }
+  }
+}

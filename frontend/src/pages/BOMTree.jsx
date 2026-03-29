@@ -1,27 +1,67 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { TreeStructure, CookingPot, Eye } from "@phosphor-icons/react";
+import { TreeStructure, CookingPot, Eye, UploadSimple, DownloadSimple, FileText } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
 export default function BOMTree() {
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState({});
 
   useEffect(() => {
+    fetchRecipes();
+  }, []);
+
+  const fetchRecipes = () => {
     axios.get(API + "/recipes")
       .then(res => setRecipes(res.data))
       .catch(() => toast.error("Erreur"))
       .finally(() => setLoading(false));
-  }, []);
+  };
 
   const toggle = (id) => {
     setExpandedIds(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    setImporting(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const response = await axios.post(API + "/recipes/import-bom-csv", fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      if (response.data.success) {
+        toast.success(response.data.imported_count + " recette(s) importee(s) (" + response.data.intermediate_count + " semi-fini(s))");
+        if (response.data.errors?.length > 0) {
+          toast.warning(response.data.errors.length + " erreur(s)");
+        }
+        fetchRecipes();
+      }
+      setIsImportDialogOpen(false);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erreur lors de l import");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const downloadTemplate = () => {
+    window.open(API + "/recipes/bom-csv-template", '_blank');
   };
 
   const topLevel = recipes.filter(r => !r.is_intermediate);
@@ -84,9 +124,14 @@ export default function BOMTree() {
 
   return (
     <div className="fade-in" data-testid="bom-tree-page">
-      <div className="mb-8">
-        <h1 className="page-title">Arbre de Fabrication</h1>
-        <p className="page-subtitle">Visualisez la structure de vos recettes et articles semi-finis</p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="page-title">Arbre de Fabrication</h1>
+          <p className="page-subtitle">Visualisez la structure de vos recettes et articles semi-finis</p>
+        </div>
+        <Button onClick={() => setIsImportDialogOpen(true)} className="bg-[#002FA7] hover:bg-[#002482]" data-testid="import-bom-btn">
+          <UploadSimple size={20} className="mr-2" /> Importer Arbre CSV
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -107,7 +152,7 @@ export default function BOMTree() {
         <div className="stat-card" data-testid="bom-total-all">
           <div className="flex items-center gap-2 mb-2">
             <CookingPot size={20} className="text-[#10B981]" />
-            <span className="stat-label">Total recettes</span>
+            <span className="stat-label">Total</span>
           </div>
           <div className="stat-value">{recipes.length}</div>
         </div>
@@ -117,8 +162,13 @@ export default function BOMTree() {
         <div className="empty-state bg-white border border-zinc-200 rounded-lg">
           <TreeStructure size={64} className="mx-auto mb-4 text-zinc-300" />
           <p className="empty-state-title">Aucune recette</p>
-          <p className="empty-state-text">Creez des recettes pour voir l arbre de fabrication</p>
-          <Button onClick={() => navigate("/recipes")} className="bg-[#002FA7] hover:bg-[#002482]">Creer une recette</Button>
+          <p className="empty-state-text">Importez un arbre de fabrication via CSV ou creez des recettes</p>
+          <div className="flex gap-3 justify-center">
+            <Button variant="outline" onClick={() => setIsImportDialogOpen(true)}>
+              <UploadSimple size={18} className="mr-2" /> Importer CSV
+            </Button>
+            <Button onClick={() => navigate("/recipes")} className="bg-[#002FA7] hover:bg-[#002482]">Creer une recette</Button>
+          </div>
         </div>
       ) : (
         <div className="space-y-6">
@@ -139,6 +189,55 @@ export default function BOMTree() {
           )}
         </div>
       )}
+
+      {/* Import BOM CSV Dialog */}
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className="sm:max-w-[550px]" data-testid="import-bom-dialog">
+          <DialogHeader>
+            <DialogTitle>Importer un arbre de fabrication (CSV)</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <FileText size={24} className="text-blue-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium text-blue-900">Format du fichier CSV</p>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Colonnes : name, description, output_quantity, output_unit, margin, is_intermediate, ingredient_name, ingredient_quantity, ingredient_unit, ingredient_price, freinte, sub_recipe, labor_description, labor_hours, labor_rate
+                  </p>
+                  <p className="text-sm text-blue-600 mt-2 font-medium">
+                    Colonne "sub_recipe" : NomRecette:quantite:unite (ex: Pate brisee:0.5:kg)
+                  </p>
+                  <p className="text-sm text-blue-600 mt-1">
+                    Colonne "is_intermediate" : "oui" pour les articles semi-finis
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800">
+                Les articles semi-finis sont importes en premier, puis les produits finis avec les liens vers les sous-recettes.
+              </p>
+            </div>
+            <div className="flex justify-center">
+              <Button variant="outline" onClick={downloadTemplate} data-testid="download-bom-template-btn">
+                <DownloadSimple size={18} className="mr-2" /> Telecharger le modele CSV
+              </Button>
+            </div>
+            <div className="border-2 border-dashed border-zinc-300 rounded-lg p-8 text-center">
+              <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileUpload} className="hidden" id="bom-csv-upload" data-testid="bom-csv-file-input" />
+              <UploadSimple size={40} className="mx-auto mb-3 text-zinc-400" />
+              <p className="text-zinc-600 mb-3">{importing ? "Import en cours..." : "Selectionnez votre fichier CSV"}</p>
+              <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing} data-testid="select-bom-csv-btn">
+                {importing ? "Import en cours..." : "Selectionner un fichier"}
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>Fermer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

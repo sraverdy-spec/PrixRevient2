@@ -14,6 +14,7 @@ import Categories from "@/pages/Categories";
 import CostsTable from "@/pages/CostsTable";
 import Comparison from "@/pages/Comparison";
 import BOMTree from "@/pages/BOMTree";
+import ImportCenter from "@/pages/ImportCenter";
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -60,6 +61,7 @@ function AppRoutes() {
         <Route path="costs-table" element={<CostsTable />} />
         <Route path="comparison" element={<Comparison />} />
         <Route path="bom" element={<BOMTree />} />
+        <Route path="import-center" element={<ImportCenter />} />
       </Route>
     </Routes>
   );

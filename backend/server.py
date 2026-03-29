@@ -491,6 +491,36 @@ async def get_intermediate_recipes():
     recipes = await db.recipes.find({"is_intermediate": True}, {"_id": 0}).to_list(1000)
     return recipes
 
+@api_router.get("/recipes/csv-template")
+async def get_recipes_csv_template():
+    template = """name;description;output_quantity;output_unit;margin;is_intermediate;ingredient_name;ingredient_quantity;ingredient_unit;ingredient_price;freinte;sub_recipe;labor_description;labor_hours;labor_rate
+Pate brisee;Pate de base;1;kg;30;oui;Farine de ble;0.5;kg;1.20;2;;Petrissage;0.5;15
+Pate brisee;Pate de base;1;kg;30;oui;Beurre;0.25;kg;8.00;3;;;;
+Tarte aux pommes;Tarte classique;8;piece;35;non;Sucre;0.1;kg;1.50;2;;Preparation;1;15
+Tarte aux pommes;Tarte classique;8;piece;35;non;Oeufs;3;piece;0.25;0;;Cuisson;0.75;12
+Tarte aux pommes;Tarte classique;8;piece;35;non;;;;;;Pate brisee:0.5:kg;;;
+"""
+    return StreamingResponse(
+        BytesIO(template.encode('utf-8-sig')),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=template_recettes_arbre.csv"}
+    )
+
+@api_router.get("/recipes/bom-csv-template")
+async def get_bom_csv_template():
+    template = """name;description;output_quantity;output_unit;margin;is_intermediate;ingredient_name;ingredient_quantity;ingredient_unit;ingredient_price;freinte;sub_recipe;labor_description;labor_hours;labor_rate
+Pate brisee;Pate de base;1;kg;30;oui;Farine de ble;0.5;kg;1.20;2;;Petrissage;0.5;15
+Pate brisee;Pate de base;1;kg;30;oui;Beurre;0.25;kg;8.00;3;;;;
+Tarte aux pommes;Tarte classique;8;piece;35;non;Sucre;0.1;kg;1.50;2;;Preparation;1;15
+Tarte aux pommes;Tarte classique;8;piece;35;non;Oeufs;3;piece;0.25;0;;Cuisson;0.75;12
+Tarte aux pommes;Tarte classique;8;piece;35;non;;;;;;Pate brisee:0.5:kg;;;
+"""
+    return StreamingResponse(
+        BytesIO(template.encode('utf-8-sig')),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=template_arbre_fabrication.csv"}
+    )
+
 @api_router.get("/recipes/{recipe_id}")
 async def get_recipe(recipe_id: str):
     recipe = await db.recipes.find_one({"id": recipe_id}, {"_id": 0})
@@ -898,19 +928,313 @@ async def import_recipes_csv(file: UploadFile = File(...)):
     
     return {"success": len(imported_recipes) > 0, "imported_count": len(imported_recipes), "errors": errors, "recipes": imported_recipes}
 
-@api_router.get("/recipes/csv-template")
-async def get_recipes_csv_template():
-    template = """name;description;output_quantity;output_unit;margin;ingredient_name;ingredient_quantity;ingredient_unit;ingredient_price;freinte;labor_description;labor_hours;labor_rate
-Pain de campagne;Pain traditionnel;10;pièce;35;Farine de blé;5;kg;1.20;2;Pétrissage;1;15
-Pain de campagne;Pain traditionnel;10;pièce;35;Levure;0.1;kg;8.00;0;Cuisson;0.5;15
-Croissant;Viennoiserie;20;pièce;40;Farine;2;kg;1.20;2;Préparation;2;18
-Croissant;Viennoiserie;20;pièce;40;Beurre;1;kg;8.50;0;Cuisson;0.5;18
-"""
-    return StreamingResponse(
-        BytesIO(template.encode('utf-8-sig')),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=template_recettes.csv"}
-    )
+# ================= BOM TREE CSV IMPORT =================
+
+@api_router.post("/recipes/import-bom-csv")
+async def import_bom_csv(file: UploadFile = File(...)):
+    """Import recipes with manufacturing tree (BOM) from CSV.
+    Supports sub_recipe column to link intermediate recipes as ingredients.
+    Format sub_recipe: 'RecipeName:quantity:unit'
+    """
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Le fichier doit etre au format CSV")
+    
+    content = await file.read()
+    decoded = content.decode('utf-8-sig')
+    reader = csv.DictReader(StringIO(decoded), delimiter=';')
+    if not reader.fieldnames or len(reader.fieldnames) <= 1:
+        reader = csv.DictReader(StringIO(decoded), delimiter=',')
+    
+    recipes_dict = {}
+    sub_recipe_links = {}
+    errors = []
+    
+    rows = list(reader)
+    
+    # Phase 1: Parse all recipes
+    for row_num, row in enumerate(rows, start=2):
+        try:
+            row = {k.strip().lower().replace('\ufeff', ''): v.strip() if v else '' for k, v in row.items() if k}
+            recipe_name = row.get('name', row.get('nom', '')).strip()
+            if not recipe_name:
+                continue
+            
+            is_intermediate_str = row.get('is_intermediate', row.get('semi_fini', '')).strip().lower()
+            is_intermediate = is_intermediate_str in ('oui', 'true', '1', 'yes', 'vrai')
+            
+            if recipe_name not in recipes_dict:
+                recipes_dict[recipe_name] = {
+                    'name': recipe_name,
+                    'description': row.get('description', ''),
+                    'output_quantity': float(row.get('output_quantity', row.get('quantite_produite', '1')).replace(',', '.') or 1),
+                    'output_unit': row.get('output_unit', row.get('unite_sortie', 'piece')) or 'piece',
+                    'target_margin': float(row.get('margin', row.get('marge', '30')).replace(',', '.') or 30),
+                    'is_intermediate': is_intermediate,
+                    'ingredients': [],
+                    'labor_costs': [],
+                    'overhead_ids': []
+                }
+                sub_recipe_links[recipe_name] = []
+            
+            recipe = recipes_dict[recipe_name]
+            
+            # Check for sub_recipe reference (format: RecipeName:quantity:unit)
+            sub_ref = row.get('sub_recipe', row.get('sous_recette', '')).strip()
+            if sub_ref:
+                parts = sub_ref.split(':')
+                sub_name = parts[0].strip()
+                sub_qty = float(parts[1].replace(',', '.')) if len(parts) > 1 and parts[1].strip() else 1.0
+                sub_unit = parts[2].strip() if len(parts) > 2 and parts[2].strip() else 'unite'
+                sub_recipe_links[recipe_name].append({
+                    'sub_name': sub_name,
+                    'quantity': sub_qty,
+                    'unit': sub_unit
+                })
+            
+            # Add raw material ingredient
+            ing_name = row.get('ingredient_name', row.get('matiere', row.get('ingredient', ''))).strip()
+            ing_qty = row.get('ingredient_quantity', row.get('quantite', row.get('qte', ''))).strip()
+            
+            if ing_name and ing_qty:
+                ing_unit = row.get('ingredient_unit', row.get('unite', 'unite')).strip() or 'unite'
+                ing_price = row.get('ingredient_price', row.get('prix_unitaire', row.get('prix', '0'))).strip()
+                freinte = row.get('freinte', row.get('perte', '0')).strip()
+                
+                existing_mat = await db.raw_materials.find_one({"name": ing_name}, {"_id": 0})
+                if not existing_mat:
+                    new_mat = RawMaterial(
+                        name=ing_name, unit=ing_unit,
+                        unit_price=float(ing_price.replace(',', '.')) if ing_price else 0,
+                        freinte=float(freinte.replace(',', '.')) if freinte else 0
+                    )
+                    mat_doc = new_mat.model_dump()
+                    mat_doc['created_at'] = mat_doc['created_at'].isoformat()
+                    mat_doc['updated_at'] = mat_doc['updated_at'].isoformat()
+                    await db.raw_materials.insert_one(mat_doc)
+                    existing_mat = mat_doc
+                
+                recipe['ingredients'].append({
+                    'material_id': existing_mat['id'],
+                    'material_name': ing_name,
+                    'quantity': float(ing_qty.replace(',', '.')),
+                    'unit': existing_mat.get('unit', ing_unit),
+                    'unit_price': existing_mat.get('unit_price', float(ing_price.replace(',', '.')) if ing_price else 0),
+                    'freinte': float(freinte.replace(',', '.')) if freinte else existing_mat.get('freinte', 0),
+                    'is_sub_recipe': False
+                })
+            
+            # Add labor
+            labor_desc = row.get('labor_description', row.get('travail', row.get('main_oeuvre', ''))).strip()
+            labor_hours = row.get('labor_hours', row.get('heures', '')).strip()
+            labor_rate = row.get('labor_rate', row.get('taux_horaire', row.get('taux', ''))).strip()
+            
+            if labor_desc and labor_hours:
+                recipe['labor_costs'].append({
+                    'description': labor_desc,
+                    'hours': float(labor_hours.replace(',', '.')),
+                    'hourly_rate': float(labor_rate.replace(',', '.')) if labor_rate else 15.0
+                })
+                
+        except Exception as e:
+            errors.append(f"Ligne {row_num}: {str(e)}")
+    
+    # Phase 2: Save intermediate recipes first
+    saved_ids = {}
+    intermediate_recipes = {k: v for k, v in recipes_dict.items() if v.get('is_intermediate')}
+    final_recipes = {k: v for k, v in recipes_dict.items() if not v.get('is_intermediate')}
+    
+    for recipe_name, recipe_data in intermediate_recipes.items():
+        recipe = Recipe(**recipe_data)
+        doc = recipe.model_dump()
+        doc['created_at'] = doc['created_at'].isoformat()
+        doc['updated_at'] = doc['updated_at'].isoformat()
+        await db.recipes.insert_one(doc)
+        saved_ids[recipe_name] = recipe.id
+    
+    # Phase 3: Save final recipes with sub-recipe references
+    for recipe_name, recipe_data in final_recipes.items():
+        links = sub_recipe_links.get(recipe_name, [])
+        for link in links:
+            sub_id = saved_ids.get(link['sub_name'])
+            if not sub_id:
+                existing_sub = await db.recipes.find_one({"name": link['sub_name'], "is_intermediate": True}, {"_id": 0})
+                if existing_sub:
+                    sub_id = existing_sub['id']
+            
+            if sub_id:
+                recipe_data['ingredients'].append({
+                    'sub_recipe_id': sub_id,
+                    'material_name': link['sub_name'],
+                    'quantity': link['quantity'],
+                    'unit': link['unit'],
+                    'unit_price': 0,
+                    'freinte': 0,
+                    'is_sub_recipe': True
+                })
+            else:
+                errors.append(f"Sous-recette '{link['sub_name']}' introuvable pour '{recipe_name}'")
+        
+        recipe = Recipe(**recipe_data)
+        doc = recipe.model_dump()
+        doc['created_at'] = doc['created_at'].isoformat()
+        doc['updated_at'] = doc['updated_at'].isoformat()
+        await db.recipes.insert_one(doc)
+        saved_ids[recipe_name] = recipe.id
+    
+    return {
+        "success": len(saved_ids) > 0,
+        "imported_count": len(saved_ids),
+        "intermediate_count": len(intermediate_recipes),
+        "final_count": len(final_recipes),
+        "errors": errors,
+        "recipes": [{"id": v, "name": k} for k, v in saved_ids.items()]
+    }
+
+# ================= AUTO IMPORT API =================
+
+SFTP_WATCH_DIR = os.path.join(ROOT_DIR, "import_watch")
+os.makedirs(SFTP_WATCH_DIR, exist_ok=True)
+IMPORT_LOG_FILE = os.path.join(ROOT_DIR, "import_log.json")
+
+@api_router.post("/import/auto")
+async def auto_import(file: UploadFile = File(...), import_type: str = "materials"):
+    """API endpoint for automated CSV imports. 
+    Use import_type='materials' or 'recipes' or 'bom'.
+    Can be called from external systems (ERP, scripts, SFTP watchers).
+    """
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Le fichier doit etre au format CSV")
+    
+    log_entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "filename": file.filename,
+        "import_type": import_type,
+        "source": "api"
+    }
+    
+    if import_type == "materials":
+        result = await import_materials_csv(file)
+    elif import_type == "bom":
+        result = await import_bom_csv(file)
+    elif import_type == "recipes":
+        result = await import_recipes_csv(file)
+    else:
+        raise HTTPException(status_code=400, detail="Type d'import invalide. Utilisez 'materials', 'recipes' ou 'bom'")
+    
+    log_entry["result"] = result
+    _append_import_log(log_entry)
+    
+    return result
+
+@api_router.post("/import/sftp-scan")
+async def sftp_scan():
+    """Scan the SFTP watch directory for CSV files and import them automatically.
+    Files are moved to a 'processed' subdirectory after import.
+    Naming convention: materials_*.csv, recipes_*.csv, bom_*.csv
+    """
+    import shutil
+    processed_dir = os.path.join(SFTP_WATCH_DIR, "processed")
+    os.makedirs(processed_dir, exist_ok=True)
+    
+    results = []
+    files_found = [f for f in os.listdir(SFTP_WATCH_DIR) if f.endswith('.csv')]
+    
+    for filename in sorted(files_found):
+        filepath = os.path.join(SFTP_WATCH_DIR, filename)
+        fname_lower = filename.lower()
+        
+        if fname_lower.startswith('bom') or fname_lower.startswith('arbre'):
+            import_type = 'bom'
+        elif fname_lower.startswith('material') or fname_lower.startswith('matiere'):
+            import_type = 'materials'
+        elif fname_lower.startswith('recette') or fname_lower.startswith('recipe'):
+            import_type = 'recipes'
+        else:
+            import_type = 'materials'
+        
+        try:
+            with open(filepath, 'rb') as f:
+                content = f.read()
+            
+            upload = UploadFile(filename=filename, file=BytesIO(content))
+            
+            if import_type == 'bom':
+                result = await import_bom_csv(upload)
+            elif import_type == 'recipes':
+                result = await import_recipes_csv(upload)
+            else:
+                result = await import_materials_csv(upload)
+            
+            dest = os.path.join(processed_dir, f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{filename}")
+            shutil.move(filepath, dest)
+            
+            log_entry = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "filename": filename,
+                "import_type": import_type,
+                "source": "sftp",
+                "result": result
+            }
+            _append_import_log(log_entry)
+            
+            results.append({"filename": filename, "type": import_type, "result": result})
+        except Exception as e:
+            results.append({"filename": filename, "type": import_type, "error": str(e)})
+    
+    return {
+        "files_scanned": len(files_found),
+        "results": results,
+        "watch_directory": SFTP_WATCH_DIR,
+        "processed_directory": processed_dir
+    }
+
+@api_router.get("/import/status")
+async def import_status():
+    """Get import configuration and recent import history."""
+    pending_files = [f for f in os.listdir(SFTP_WATCH_DIR) if f.endswith('.csv')]
+    processed_dir = os.path.join(SFTP_WATCH_DIR, "processed")
+    processed_files = []
+    if os.path.exists(processed_dir):
+        processed_files = [f for f in os.listdir(processed_dir) if f.endswith('.csv')]
+    
+    recent_logs = _read_import_logs(limit=20)
+    
+    return {
+        "watch_directory": SFTP_WATCH_DIR,
+        "pending_files": pending_files,
+        "processed_count": len(processed_files),
+        "recent_imports": recent_logs,
+        "api_endpoints": {
+            "auto_import": "POST /api/import/auto?import_type=materials|recipes|bom",
+            "sftp_scan": "POST /api/import/sftp-scan",
+            "status": "GET /api/import/status"
+        }
+    }
+
+def _append_import_log(entry):
+    import json
+    logs = []
+    if os.path.exists(IMPORT_LOG_FILE):
+        try:
+            with open(IMPORT_LOG_FILE, 'r') as f:
+                logs = json.load(f)
+        except Exception:
+            logs = []
+    logs.append(entry)
+    logs = logs[-100:]
+    with open(IMPORT_LOG_FILE, 'w') as f:
+        json.dump(logs, f, default=str)
+
+def _read_import_logs(limit=20):
+    import json
+    if not os.path.exists(IMPORT_LOG_FILE):
+        return []
+    try:
+        with open(IMPORT_LOG_FILE, 'r') as f:
+            logs = json.load(f)
+        return logs[-limit:]
+    except Exception:
+        return []
 
 # ================= PDF EXPORT =================
 
