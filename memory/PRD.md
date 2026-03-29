@@ -20,18 +20,23 @@ Creer une application pour calculer le prix de revient d'un produit en prenant d
 - [x] Export PDF des recettes
 
 ### Phase 2 - Fonctionnalites avancees (Complete - 29 Mars 2026)
-- [x] **Freinte (pertes matieres)**: Pourcentage de perte sur chaque matiere premiere, integre dans le calcul des couts
-- [x] **Import CSV matieres premieres**: Upload de fichiers CSV (colonnes: name, unit, unit_price, supplier, freinte)
-- [x] **Arbre de fabrication**: Articles semi-finis (is_intermediate) utilisables comme sous-recettes dans d'autres recettes
-- [x] **Calcul des sous-recettes**: Le cout d'un article semi-fini est automatiquement integre dans la recette parente
-- [x] **Marge commerciale**: Marge cible configurable par recette, prix de vente conseille affiche
-- [x] **CRUD Fournisseurs**: Gestion des fournisseurs
-- [x] **CRUD Categories**: Gestion des categories
-- [x] **Tableau des couts complet**: Vue d'ensemble de tous les couts avec export Excel
-- [x] **Comparaison de recettes**: Comparer les couts entre recettes
-- [x] **Page BOM Tree**: Visualisation de l'arbre de fabrication (produits finis vs semi-finis)
-- [x] **Menu repliable**: Sidebar collapsible
-- [x] **Couts main d'oeuvre visibles**: Affichage clair dans le detail de recette et le recapitulatif
+- [x] Freinte (pertes matieres) integree dans le calcul
+- [x] Import CSV matieres premieres
+- [x] Arbre de fabrication avec articles semi-finis
+- [x] Marge commerciale et prix de vente conseille
+- [x] CRUD Fournisseurs et Categories
+- [x] Tableau des couts complet + Export Excel
+- [x] Comparaison de recettes
+- [x] Page BOM Tree
+- [x] Menu repliable (sidebar collapse) avec icones visibles
+
+### Phase 3 - Import automatique (Complete - 29 Mars 2026)
+- [x] Import CSV arbre de fabrication (BOM) avec colonne sub_recipe
+- [x] API REST pour import automatique (POST /api/import/auto)
+- [x] Surveillance SFTP du dossier /backend/import_watch/
+- [x] Centre d'Import avec 3 onglets (API, SFTP, Historique)
+- [x] Documentation API integree dans le Centre d'Import
+- [x] Historique des imports avec statut
 
 ## Endpoints API
 - POST /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/me
@@ -41,18 +46,14 @@ Creer une application pour calculer le prix de revient d'un produit en prenant d
 - GET /api/recipes/{id}/cost, GET /api/recipes/{id}/pdf
 - GET /api/recipes/intermediate
 - POST /api/recipes/import-csv, GET /api/recipes/csv-template
+- POST /api/recipes/import-bom-csv, GET /api/recipes/bom-csv-template
 - GET/POST /api/overheads, GET/PUT/DELETE /api/overheads/{id}
 - GET/POST /api/suppliers, GET/PUT/DELETE /api/suppliers/{id}
 - GET/POST /api/categories, GET/PUT/DELETE /api/categories/{id}
 - GET /api/dashboard/stats, /api/costs/all, /api/costs/export
-
-## Schema DB
-- users: {email, hashed_password, name, role}
-- raw_materials: {id, name, unit, unit_price, supplier_name, category_id, freinte, description}
-- recipes: {id, name, description, output_quantity, output_unit, ingredients[], labor_costs[], overhead_ids[], target_margin, is_intermediate, category_id}
-- overheads: {id, name, category, monthly_amount, allocation_method, allocation_value}
-- suppliers: {id, name, contact, email, phone, address}
-- categories: {id, name, description}
+- POST /api/import/auto?import_type=materials|recipes|bom
+- POST /api/import/sftp-scan
+- GET /api/import/status
 
 ## Credentials
 - Admin: admin@example.com / Admin123!
@@ -62,4 +63,4 @@ Creer une application pour calculer le prix de revient d'un produit en prenant d
 - P2: Historique des prix et tendances
 - P2: Gestion multi-utilisateurs
 - P2: Notifications d'alerte stock
-- P3: Application PHP standalone (existe dans /app/php_version/)
+- P3: Cron job automatique pour SFTP scan periodique
