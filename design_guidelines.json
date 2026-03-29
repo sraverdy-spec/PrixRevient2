@@ -1,0 +1,119 @@
+{
+  "theme": "light",
+  "archetype": "Archetype 4 (Swiss & High-Contrast)",
+  "design_philosophy": "Objective, rigid, and functional. 95% of the UI is monochrome, letting data and functional color elements stand out. A 'Control Room' approach for high-density information, prioritizing clarity, hierarchy, and scanability over aesthetics.",
+  "colors": {
+    "background": {
+      "app": "#FAFAFA",
+      "card": "#FFFFFF",
+      "sidebar": "#F4F4F5"
+    },
+    "text": {
+      "primary": "#09090B",
+      "secondary": "#71717A",
+      "tertiary": "#A1A1AA",
+      "disabled": "#D4D4D8"
+    },
+    "border": {
+      "default": "#E4E4E7",
+      "hover": "#D4D4D8",
+      "focus": "#002FA7"
+    },
+    "primary": {
+      "DEFAULT": "#002FA7",
+      "hover": "#002482",
+      "foreground": "#FFFFFF"
+    },
+    "functional": {
+      "success": "#10B981",
+      "success_bg": "#D1FAE5",
+      "warning": "#F59E0B",
+      "warning_bg": "#FEF3C7",
+      "destructive": "#EF4444",
+      "destructive_bg": "#FEE2E2",
+      "info": "#3B82F6",
+      "info_bg": "#DBEAFE"
+    },
+    "charts": [
+      "#002FA7",
+      "#10B981",
+      "#F59E0B",
+      "#EF4444",
+      "#8B5CF6",
+      "#EC4899"
+    ]
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Manrope",
+      "body": "IBM Plex Sans",
+      "mono": "JetBrains Mono"
+    },
+    "scale": {
+      "h1": "text-4xl font-extrabold tracking-tighter text-zinc-950",
+      "h2": "text-2xl font-bold tracking-tight text-zinc-900",
+      "h3": "text-xl font-semibold tracking-tight text-zinc-900",
+      "h4": "text-lg font-semibold tracking-tight text-zinc-900",
+      "body": "text-base font-normal leading-relaxed text-zinc-700",
+      "small": "text-sm font-medium leading-none text-zinc-600",
+      "tiny": "text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500"
+    }
+  },
+  "layout": {
+    "strategy": "Control Room Grid",
+    "base_grid": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4",
+    "gap": "gap-4 md:gap-6",
+    "spacing": {
+      "section_padding": "p-6 md:p-8",
+      "card_padding": "p-4 md:p-6"
+    },
+    "components": {
+      "card": "bg-white border border-zinc-200 rounded-none md:rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col h-full",
+      "header": "sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-zinc-200 px-6 py-4 flex items-center justify-between",
+      "sidebar": "fixed left-0 top-0 h-full w-64 bg-zinc-50 border-r border-zinc-200 p-4 hidden md:flex flex-col"
+    }
+  },
+  "interactions": {
+    "hover": "Subtle background shifts (e.g., hover:bg-zinc-100) and explicit text color changes.",
+    "focus": "High contrast focus rings: focus:ring-2 focus:ring-primary focus:ring-offset-2",
+    "motion": "Minimalist micro-interactions. transition-all duration-200 ease-in-out."
+  },
+  "icons": {
+    "library": "phosphor-icons/react",
+    "installation": "yarn add @phosphor-icons/react",
+    "style": "Regular for standard UI, Duotone for active states or marketing accents, size 20px default."
+  },
+  "media": {
+    "images": [
+      {
+        "category": "user_avatar",
+        "url": "https://images.unsplash.com/photo-1738750908048-14200459c3c9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODF8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMGF2YXRhciUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NDgxNzA2MXww&ixlib=rb-4.1.0&q=85",
+        "description": "Professional user avatar for the top navigation profile dropdown."
+      },
+      {
+        "category": "empty_state",
+        "url": "https://images.pexels.com/photos/8834237/pexels-photo-8834237.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Clean 3D hand gesture for empty states like 'No recipes created yet'."
+      }
+    ]
+  },
+  "component_guidelines": {
+    "buttons": "Flat, squared or max rounded-md. Primary: bg-[#002FA7] text-white hover:bg-[#002482]. Secondary: bg-white border border-zinc-200 text-zinc-900 hover:bg-zinc-50.",
+    "inputs": "Shadcn defaults but with explicit focus rings (focus-visible:ring-[#002FA7]). Background white, border zinc-200.",
+    "tables": "Dense. text-sm. Subtle zebra striping (even:bg-zinc-50). border-collapse. text-left alignment except for numbers/costs which should be text-right.",
+    "charts": "Recharts or Shadcn Charts. Use the functional color palette. Maintain accessibility by ensuring high contrast between data points.",
+    "modals": "Backdrop blur bg-black/60. Modal background solid white. Sharp corners or max rounded-lg. No glassmorphism on the modal itself."
+  },
+  "accessibility": {
+    "testing": "All interactive elements must have data-testid attributes (e.g., data-testid='create-recipe-button').",
+    "contrast": "Text contrast must meet WCAG AA (4.5:1 for normal text). Do not use pure gray (#808080); tint it with the primary color slightly."
+  },
+  "instructions_to_main_agent": [
+    "Use Tailwind CSS extensively. Create a sidebar layout.",
+    "Implement Recharts for the cost breakdown visualization (pie charts for overheads/materials, bar charts for comparisons).",
+    "Create a modular, dense 'Control Room' dashboard view as the main route.",
+    "Use Shadcn UI components for dropdowns, selects, tables, and dialogs.",
+    "Strictly follow the typographic scale: Manrope for headings, IBM Plex Sans for body.",
+    "Do not use card components everywhere; where possible, use 'Grid Borders' or raw tables to save space and present dense data effectively."
+  ]
+}
