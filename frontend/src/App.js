@@ -9,11 +9,14 @@ import Recipes from "@/pages/Recipes";
 import RecipeDetail from "@/pages/RecipeDetail";
 import Overheads from "@/pages/Overheads";
 import Login from "@/pages/Login";
+import Suppliers from "@/pages/Suppliers";
+import Categories from "@/pages/Categories";
+import CostsTable from "@/pages/CostsTable";
+import Comparison from "@/pages/Comparison";
+import BOMTree from "@/pages/BOMTree";
 
-// Protected Route Component
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FAFAFA]">
@@ -21,18 +24,14 @@ const ProtectedRoute = ({ children }) => {
       </div>
     );
   }
-
   if (!user || user === false) {
     return <Navigate to="/login" replace />;
   }
-
   return children;
 };
 
-// Public Route (redirect if authenticated)
 const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FAFAFA]">
@@ -40,38 +39,27 @@ const PublicRoute = ({ children }) => {
       </div>
     );
   }
-
   if (user && user !== false) {
     return <Navigate to="/" replace />;
   }
-
   return children;
 };
 
 function AppRoutes() {
   return (
     <Routes>
-      <Route
-        path="/login"
-        element={
-          <PublicRoute>
-            <Login />
-          </PublicRoute>
-        }
-      />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }
-      >
+      <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+      <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="materials" element={<Materials />} />
         <Route path="recipes" element={<Recipes />} />
         <Route path="recipes/:id" element={<RecipeDetail />} />
         <Route path="overheads" element={<Overheads />} />
+        <Route path="suppliers" element={<Suppliers />} />
+        <Route path="categories" element={<Categories />} />
+        <Route path="costs-table" element={<CostsTable />} />
+        <Route path="comparison" element={<Comparison />} />
+        <Route path="bom" element={<BOMTree />} />
       </Route>
     </Routes>
   );
