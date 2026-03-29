@@ -1,116 +1,65 @@
-# PRD - Calculateur de Prix de Revient
+# PRD - Calculateur de Prix de Revient (PrixRevient)
 
-## Problem Statement Original
-Créer une application pour calculer le prix de revient d'un produit en prenant des coûts de main d'œuvre et la recette de production de l'article. 
-
-### User Requests
-- Application en PHP pour Apache avec MySQL
-- Export PDF de la fiche prix de revient
-- Authentification locale
-- Import de recettes depuis fichier CSV
+## Probleme original
+Creer une application pour calculer le prix de revient d'un produit en prenant des couts de main d'oeuvre et la recette de production de l'article.
 
 ## Architecture
+- **Frontend**: React + TailwindCSS + Shadcn UI + Recharts
+- **Backend**: FastAPI (Python) + PyMongo
+- **Database**: MongoDB
+- **Auth**: Session cookies (httpOnly)
 
-### Stack React/FastAPI (Déployée)
-- **Frontend**: React 18 + Tailwind CSS + Shadcn UI
-- **Backend**: FastAPI (Python)
-- **Base de données**: MongoDB
-- **Auth**: JWT avec cookies HttpOnly
+## Fonctionnalites implementees
 
-### Stack PHP (Code fourni)
-- **Frontend**: PHP + Tailwind CSS CDN
-- **Backend**: PHP 7.4+
-- **Base de données**: MySQL
-- **Auth**: Sessions PHP + bcrypt
+### Phase 1 - MVP (Complete)
+- [x] Authentification (login/register/logout) avec session cookies
+- [x] Tableau de bord avec statistiques et graphiques
+- [x] CRUD Matieres premieres
+- [x] CRUD Recettes de production
+- [x] Calcul du prix de revient (matieres + main d'oeuvre + frais generaux)
+- [x] Export PDF des recettes
 
-## User Personas
-1. **Artisan/PME**: Calcule le prix de revient de ses produits manufacturés
-2. **Gestionnaire**: Gère les recettes, matières et frais généraux
+### Phase 2 - Fonctionnalites avancees (Complete - 29 Mars 2026)
+- [x] **Freinte (pertes matieres)**: Pourcentage de perte sur chaque matiere premiere, integre dans le calcul des couts
+- [x] **Import CSV matieres premieres**: Upload de fichiers CSV (colonnes: name, unit, unit_price, supplier, freinte)
+- [x] **Arbre de fabrication**: Articles semi-finis (is_intermediate) utilisables comme sous-recettes dans d'autres recettes
+- [x] **Calcul des sous-recettes**: Le cout d'un article semi-fini est automatiquement integre dans la recette parente
+- [x] **Marge commerciale**: Marge cible configurable par recette, prix de vente conseille affiche
+- [x] **CRUD Fournisseurs**: Gestion des fournisseurs
+- [x] **CRUD Categories**: Gestion des categories
+- [x] **Tableau des couts complet**: Vue d'ensemble de tous les couts avec export Excel
+- [x] **Comparaison de recettes**: Comparer les couts entre recettes
+- [x] **Page BOM Tree**: Visualisation de l'arbre de fabrication (produits finis vs semi-finis)
+- [x] **Menu repliable**: Sidebar collapsible
+- [x] **Couts main d'oeuvre visibles**: Affichage clair dans le detail de recette et le recapitulatif
 
-## Core Requirements (Implémenté)
-- [x] Gestion des matières premières (CRUD)
-- [x] Gestion des recettes de production (CRUD)
-- [x] Gestion des frais généraux (CRUD)
-- [x] Calcul automatique du prix de revient
-- [x] Authentification locale (email/mot de passe)
-- [x] Export PDF des fiches de prix de revient
-- [x] Import CSV des recettes
-- [x] Dashboard avec statistiques
+## Endpoints API
+- POST /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/me
+- GET/POST /api/materials, GET/PUT/DELETE /api/materials/{id}
+- POST /api/materials/import-csv, GET /api/materials/csv-template
+- GET/POST /api/recipes, GET/PUT/DELETE /api/recipes/{id}
+- GET /api/recipes/{id}/cost, GET /api/recipes/{id}/pdf
+- GET /api/recipes/intermediate
+- POST /api/recipes/import-csv, GET /api/recipes/csv-template
+- GET/POST /api/overheads, GET/PUT/DELETE /api/overheads/{id}
+- GET/POST /api/suppliers, GET/PUT/DELETE /api/suppliers/{id}
+- GET/POST /api/categories, GET/PUT/DELETE /api/categories/{id}
+- GET /api/dashboard/stats, /api/costs/all, /api/costs/export
 
-## What's Been Implemented
+## Schema DB
+- users: {email, hashed_password, name, role}
+- raw_materials: {id, name, unit, unit_price, supplier_name, category_id, freinte, description}
+- recipes: {id, name, description, output_quantity, output_unit, ingredients[], labor_costs[], overhead_ids[], target_margin, is_intermediate, category_id}
+- overheads: {id, name, category, monthly_amount, allocation_method, allocation_value}
+- suppliers: {id, name, contact, email, phone, address}
+- categories: {id, name, description}
 
-### React App (Live)
-- **Date**: 29/03/2026
-- Login/Register avec JWT
-- Dashboard avec statistiques et graphiques
-- CRUD complet matières premières
-- CRUD complet recettes avec détail
-- Ajout ingrédients depuis catalogue
-- Ajout coûts main d'œuvre
-- Affectation frais généraux
-- Calcul prix de revient temps réel
-- Export PDF
-- Import CSV recettes
+## Credentials
+- Admin: admin@example.com / Admin123!
 
-### PHP Code (Fourni)
-- **Date**: 29/03/2026
-- Structure complète pour Apache/MySQL
-- Fichiers: config.php, database.sql, login.php, index.php, materials.php, recipes.php, recipe_detail.php, overheads.php, export_pdf.php
-
-## Prioritized Backlog
-
-### P0 (Critique) - Fait
-- [x] Authentification
-- [x] CRUD matières/recettes/frais
-- [x] Calcul prix de revient
-- [x] Export PDF
-
-### P1 (Important) - Fait
-- [x] Import CSV
-- [x] Dashboard statistiques
-
-### P2 (Nice to have)
-- [ ] Gestion multi-utilisateurs
-- [ ] Historique des prix
-- [ ] Comparaison de recettes
-- [ ] Export Excel
-- [ ] Gestion des fournisseurs avancée
-
-## Next Tasks
-1. Télécharger le code PHP depuis /app/php_version/
-2. Configurer Apache/MySQL sur votre serveur
-3. Exécuter database.sql pour créer les tables
-4. Modifier config.php avec vos paramètres
-
-## Files Structure
-
-### React App
-```
-/app/frontend/src/
-├── App.js
-├── context/AuthContext.jsx
-├── pages/
-│   ├── Login.jsx
-│   ├── Dashboard.jsx
-│   ├── Materials.jsx
-│   ├── Recipes.jsx
-│   ├── RecipeDetail.jsx
-│   └── Overheads.jsx
-└── components/Layout.jsx
-```
-
-### PHP App
-```
-/app/php_version/
-├── config.php
-├── database.sql
-├── login.php
-├── index.php
-├── materials.php
-├── recipes.php
-├── recipe_detail.php
-├── overheads.php
-├── export_pdf.php
-├── csv_template.php
-└── templates/
-```
+## Backlog / Taches futures
+- P2: Module simulation (scenarios de cout)
+- P2: Historique des prix et tendances
+- P2: Gestion multi-utilisateurs
+- P2: Notifications d'alerte stock
+- P3: Application PHP standalone (existe dans /app/php_version/)
