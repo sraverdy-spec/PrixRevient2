@@ -926,10 +926,13 @@ async def compare_recipes(recipe_ids: List[str]):
     results = []
     for rid in recipe_ids:
         try:
+            recipe = await db.recipes.find_one({"id": rid}, {"_id": 0})
             cost = await calculate_cost(rid)
             results.append({
                 "recipe_id": rid,
                 "recipe_name": cost.recipe_name,
+                "supplier_name": recipe.get("supplier_name", "") if recipe else "",
+                "version": recipe.get("version", 1) if recipe else 1,
                 "cost_per_unit": cost.cost_per_unit,
                 "total_cost": cost.total_cost,
                 "material_cost": cost.total_material_cost,

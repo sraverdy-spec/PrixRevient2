@@ -54,13 +54,23 @@ const Comparison = () => {
     }
   };
 
-  const chartData = comparisonData.map(d => ({
-    name: d.recipe_name.length > 15 ? d.recipe_name.substring(0, 15) + "..." : d.recipe_name,
-    "Matières": d.material_cost,
-    "Main d'œuvre": d.labor_cost,
-    "Frais généraux": d.overhead_cost,
-    "Prix/Unité": d.cost_per_unit
-  }));
+  const getLabel = (d) => {
+    let label = d.recipe_name;
+    label += ` v${d.version || 1}`;
+    if (d.supplier_name) label += ` (${d.supplier_name})`;
+    return label;
+  };
+
+  const chartData = comparisonData.map(d => {
+    const label = getLabel(d);
+    return {
+      name: label.length > 25 ? label.substring(0, 25) + "..." : label,
+      "Matières": d.material_cost,
+      "Main d'œuvre": d.labor_cost,
+      "Frais généraux": d.overhead_cost,
+      "Prix/Unité": d.cost_per_unit
+    };
+  });
 
   return (
     <div className="fade-in" data-testid="comparison-page">
@@ -81,7 +91,9 @@ const Comparison = () => {
             </SelectTrigger>
             <SelectContent>
               {recipes.filter(r => !selectedIds.includes(r.id)).map((recipe) => (
-                <SelectItem key={recipe.id} value={recipe.id}>{recipe.name}</SelectItem>
+                <SelectItem key={recipe.id} value={recipe.id}>
+                  {recipe.name} v{recipe.version || 1}{recipe.supplier_name ? ` - ${recipe.supplier_name}` : ""}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -96,7 +108,7 @@ const Comparison = () => {
             const recipe = recipes.find(r => r.id === id);
             return recipe ? (
               <div key={id} className="flex items-center gap-2 px-3 py-1 bg-zinc-100 rounded-full">
-                <span className="text-sm">{recipe.name}</span>
+                <span className="text-sm">{recipe.name} <span className="text-xs text-blue-600 font-mono">v{recipe.version || 1}</span>{recipe.supplier_name ? <span className="text-xs text-zinc-400"> - {recipe.supplier_name}</span> : ""}</span>
                 <button onClick={() => removeRecipe(id)} className="hover:text-red-500">
                   <Trash size={14} />
                 </button>
@@ -132,6 +144,8 @@ const Comparison = () => {
               <thead>
                 <tr>
                   <th>Recette</th>
+                  <th>Fournisseur</th>
+                  <th className="text-center">Version</th>
                   <th className="text-right">Matières</th>
                   <th className="text-right">Main d'œuvre</th>
                   <th className="text-right">Frais gén.</th>
@@ -144,6 +158,8 @@ const Comparison = () => {
                 {comparisonData.map((data, index) => (
                   <tr key={data.recipe_id} data-testid={`comparison-row-${index}`}>
                     <td className="font-medium">{data.recipe_name}</td>
+                    <td className="text-sm text-zinc-500">{data.supplier_name || "-"}</td>
+                    <td className="text-center"><span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-full font-mono">v{data.version || 1}</span></td>
                     <td className="text-right font-mono">{data.material_cost.toFixed(2)} €</td>
                     <td className="text-right font-mono text-[#10B981]">{data.labor_cost.toFixed(2)} €</td>
                     <td className="text-right font-mono text-[#F59E0B]">{data.overhead_cost.toFixed(2)} €</td>
