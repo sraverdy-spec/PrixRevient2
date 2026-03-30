@@ -68,13 +68,14 @@ const Layout = () => {
         style={{ backgroundColor: sidebarBg, borderColor: sidebarBg === "#F4F4F5" ? "#E4E4E7" : "transparent" }}
         data-testid="sidebar"
       >
-        <div className="sidebar-brand" style={{ color: primaryColor }} data-testid="sidebar-brand">
-          {logoData ? (
-            <img src={logoData} alt="Logo" className="sidebar-icon" style={{ width: 28, height: 28, objectFit: "contain" }} />
-          ) : (
-            <CurrencyCircleDollar size={24} weight="bold" className="sidebar-icon" />
+        <div className="sidebar-brand" data-testid="sidebar-brand" style={{ flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+          <div className="flex items-center gap-2" style={{ color: primaryColor }}>
+            {!logoData && <CurrencyCircleDollar size={24} weight="bold" className="sidebar-icon" />}
+            {!collapsed && <span className="font-extrabold text-lg font-['Manrope']">{companyName}</span>}
+          </div>
+          {logoData && (
+            <img src={logoData} alt="Logo" style={{ maxHeight: collapsed ? 28 : 40, width: "auto", objectFit: "contain" }} data-testid="sidebar-logo" />
           )}
-          {!collapsed && <span style={{ marginLeft: "0.5rem" }}>{companyName}</span>}
         </div>
 
         <button

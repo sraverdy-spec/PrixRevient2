@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import { CurrencyCircleDollar, EnvelopeSimple, Lock } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+
+const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
 function formatApiErrorDetail(detail) {
   if (detail == null) return "Une erreur est survenue.";
@@ -21,6 +24,15 @@ const Login = () => {
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
+  const [settings, setSettings] = useState(null);
+
+  useEffect(() => {
+    axios.get(API + "/settings").then(r => setSettings(r.data)).catch(() => {});
+  }, []);
+
+  const primaryColor = settings?.primary_color || "#002FA7";
+  const companyName = settings?.company_name || "PrixRevient";
+  const logoData = settings?.logo_data || "";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -43,10 +55,17 @@ const Login = () => {
     <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-4" data-testid="login-page">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 text-[#002FA7]">
-            <CurrencyCircleDollar size={40} weight="bold" />
-            <span className="text-2xl font-extrabold font-['Manrope']">PrixRevient</span>
-          </div>
+          {logoData ? (
+            <div className="flex flex-col items-center gap-3">
+              <img src={logoData} alt="Logo" className="h-14 w-auto object-contain" data-testid="login-logo" />
+              <span className="text-2xl font-extrabold font-['Manrope']" style={{ color: primaryColor }}>{companyName}</span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2" style={{ color: primaryColor }}>
+              <CurrencyCircleDollar size={40} weight="bold" />
+              <span className="text-2xl font-extrabold font-['Manrope']">{companyName}</span>
+            </div>
+          )}
           <p className="text-zinc-500 mt-2">Calculateur de prix de revient</p>
         </div>
 
@@ -82,7 +101,7 @@ const Login = () => {
               </div>
             </div>
 
-            <Button type="submit" className="w-full bg-[#002FA7] hover:bg-[#002482]" disabled={loading} data-testid="submit-btn">
+            <Button type="submit" className="w-full text-white" style={{ backgroundColor: primaryColor }} disabled={loading} data-testid="submit-btn">
               {loading ? "Connexion..." : "Se connecter"}
             </Button>
           </form>
@@ -91,8 +110,6 @@ const Login = () => {
             Contactez l'administrateur pour obtenir un compte
           </p>
         </div>
-
-        {/* fin */}
       </div>
     </div>
   );

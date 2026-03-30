@@ -27,11 +27,11 @@ export default function Dashboard() {
   if (loading) return <div className="flex items-center justify-center h-64"><div className="text-zinc-500">Chargement...</div></div>;
 
   const statCards = [
-    { label: "Matieres premieres", value: stats?.total_materials || 0, icon: Package, color: "#002FA7", bgColor: "#EFF6FF" },
-    { label: "Recettes", value: stats?.total_recipes || 0, icon: CookingPot, color: "#10B981", bgColor: "#ECFDF5" },
-    { label: "Frais generaux", value: stats?.total_overheads || 0, icon: Gear, color: "#F59E0B", bgColor: "#FFFBEB" },
-    { label: "Fournisseurs", value: stats?.total_suppliers || 0, icon: Truck, color: "#8B5CF6", bgColor: "#F5F3FF" },
-    { label: "Cout moyen/unite", value: (stats?.avg_cost_per_unit || 0).toFixed(2) + " EUR", icon: Calculator, color: "#EF4444", bgColor: "#FEF2F2" },
+    { label: "Matieres premieres", value: stats?.total_materials || 0, icon: Package, gradient: "from-blue-500 to-blue-700", lightBg: "bg-blue-50", textAccent: "text-blue-600" },
+    { label: "Recettes", value: stats?.total_recipes || 0, icon: CookingPot, gradient: "from-emerald-500 to-emerald-700", lightBg: "bg-emerald-50", textAccent: "text-emerald-600" },
+    { label: "Frais generaux", value: stats?.total_overheads || 0, icon: Gear, gradient: "from-amber-500 to-amber-700", lightBg: "bg-amber-50", textAccent: "text-amber-600" },
+    { label: "Fournisseurs", value: stats?.total_suppliers || 0, icon: Truck, gradient: "from-violet-500 to-violet-700", lightBg: "bg-violet-50", textAccent: "text-violet-600" },
+    { label: "Cout moyen/unite", value: (stats?.avg_cost_per_unit || 0).toFixed(2) + " EUR", icon: Calculator, gradient: "from-rose-500 to-rose-700", lightBg: "bg-rose-50", textAccent: "text-rose-600" },
   ];
 
   const costBreakdownData = allCosts.map(c => ({
@@ -82,14 +82,15 @@ export default function Dashboard() {
       {/* Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8" data-testid="stat-cards">
         {statCards.map((card, i) => (
-          <div key={i} className="bg-white border border-zinc-200 rounded-xl p-5 hover:shadow-md transition-shadow" data-testid={"stat-card-" + i}>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2.5 rounded-lg" style={{ backgroundColor: card.bgColor }}>
-                <card.icon size={22} weight="duotone" style={{ color: card.color }} />
-              </div>
+          <div key={i} className={`relative overflow-hidden rounded-xl p-5 bg-gradient-to-br ${card.gradient} text-white shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5`} data-testid={"stat-card-" + i}>
+            <div className="absolute top-0 right-0 opacity-10">
+              <card.icon size={80} weight="bold" className="translate-x-3 -translate-y-3" />
             </div>
-            <p className="text-2xl font-bold text-zinc-900 font-mono">{card.value}</p>
-            <p className="text-xs text-zinc-500 mt-1">{card.label}</p>
+            <div className="relative z-10">
+              <card.icon size={24} weight="duotone" className="mb-3 opacity-90" />
+              <p className="text-3xl font-bold font-mono tracking-tight">{card.value}</p>
+              <p className="text-sm mt-1 opacity-80 font-medium">{card.label}</p>
+            </div>
           </div>
         ))}
       </div>
