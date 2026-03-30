@@ -1,192 +1,215 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { 
-  Package, 
-  CookingPot, 
-  Gear, 
-  TrendUp,
-  ArrowRight
-} from "@phosphor-icons/react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import { Package, CookingPot, Gear, Truck, Calculator, TrendUp, TreeStructure, ChartPie, ArrowRight } from "@phosphor-icons/react";
+import { useAuth } from "@/context/AuthContext";
+import { Button } from "@/components/ui/button";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area } from "recharts";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
-const CHART_COLORS = ["#002FA7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899"];
+const CHART_COLORS = ["#002FA7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#0EA5E9", "#F97316"];
 
-const Dashboard = () => {
+export default function Dashboard() {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({
-    total_materials: 0,
-    total_recipes: 0,
-    total_overheads: 0,
-    avg_cost_per_unit: 0,
-    recent_recipes: []
-  });
+  const { user } = useAuth();
+  const [stats, setStats] = useState(null);
+  const [allCosts, setAllCosts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchStats();
+    Promise.all([
+      axios.get(API + "/dashboard/stats").then(r => setStats(r.data)).catch(() => {}),
+      axios.get(API + "/costs/all").then(r => setAllCosts(r.data)).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
 
-  const fetchStats = async () => {
-    try {
-      const response = await axios.get(`${API}/dashboard/stats`);
-      setStats(response.data);
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="text-zinc-500">Chargement...</div></div>;
 
   const statCards = [
-    { 
-      label: "Matières Premières", 
-      value: stats.total_materials, 
-      icon: Package,
-      color: "#002FA7"
-    },
-    { 
-      label: "Recettes", 
-      value: stats.total_recipes, 
-      icon: CookingPot,
-      color: "#10B981"
-    },
-    { 
-      label: "Frais Généraux", 
-      value: stats.total_overheads, 
-      icon: Gear,
-      color: "#F59E0B"
-    },
-    { 
-      label: "Coût Moyen/Unité", 
-      value: `${stats.avg_cost_per_unit.toFixed(2)} €`, 
-      icon: TrendUp,
-      color: "#8B5CF6"
-    },
+    { label: "Matieres premieres", value: stats?.total_materials || 0, icon: Package, color: "#002FA7", bgColor: "#EFF6FF" },
+    { label: "Recettes", value: stats?.total_recipes || 0, icon: CookingPot, color: "#10B981", bgColor: "#ECFDF5" },
+    { label: "Frais generaux", value: stats?.total_overheads || 0, icon: Gear, color: "#F59E0B", bgColor: "#FFFBEB" },
+    { label: "Fournisseurs", value: stats?.total_suppliers || 0, icon: Truck, color: "#8B5CF6", bgColor: "#F5F3FF" },
+    { label: "Cout moyen/unite", value: (stats?.avg_cost_per_unit || 0).toFixed(2) + " EUR", icon: Calculator, color: "#EF4444", bgColor: "#FEF2F2" },
   ];
 
-  const costDistributionData = [
-    { name: "Matières", value: 45 },
-    { name: "Main d'œuvre", value: 35 },
-    { name: "Frais généraux", value: 20 },
-  ];
+  const costBreakdownData = allCosts.map(c => ({
+    name: c.name?.length > 15 ? c.name.substring(0, 15) + "..." : c.name,
+    fullName: c.name,
+    matieres: c.material_cost || 0,
+    main_oeuvre: c.labor_cost || 0,
+    frais: c.overhead_cost || 0,
+    total: c.total_cost || 0,
+    prix_vente: c.suggested_price || 0,
+  }));
 
-  if (loading) {
+  const pieData = allCosts.length > 0 ? [
+    { name: "Matieres", value: allCosts.reduce((s, c) => s + (c.material_cost || 0), 0) },
+    { name: "Main d'oeuvre", value: allCosts.reduce((s, c) => s + (c.labor_cost || 0), 0) },
+    { name: "Frais generaux", value: allCosts.reduce((s, c) => s + (c.overhead_cost || 0), 0) },
+  ].filter(d => d.value > 0) : [];
+
+  const marginData = allCosts.map(c => ({
+    name: c.name?.length > 12 ? c.name.substring(0, 12) + "..." : c.name,
+    marge: c.target_margin || 30,
+    prix_revient: c.cost_per_unit || 0,
+    prix_vente: c.suggested_price || 0,
+  }));
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
     return (
-      <div className="flex items-center justify-center h-64" data-testid="dashboard-loading">
-        <div className="text-zinc-500">Chargement...</div>
+      <div className="bg-white border border-zinc-200 rounded-lg p-3 shadow-lg">
+        <p className="font-medium text-zinc-900 text-sm mb-1">{label}</p>
+        {payload.map((p, i) => (
+          <p key={i} className="text-xs" style={{ color: p.color }}>{p.name}: {typeof p.value === "number" ? p.value.toFixed(2) + " EUR" : p.value}</p>
+        ))}
       </div>
     );
-  }
+  };
 
   return (
     <div className="fade-in" data-testid="dashboard-page">
-      {/* Page Header */}
-      <div className="page-header">
-        <h1 className="page-title" data-testid="dashboard-title">Tableau de bord</h1>
-        <p className="page-subtitle">Vue d'ensemble du calcul des prix de revient</p>
+      {/* Welcome */}
+      <div className="mb-8">
+        <h1 className="page-title" data-testid="dashboard-title">
+          Bonjour, {user?.name || "Utilisateur"}
+        </h1>
+        <p className="page-subtitle">Vue d'ensemble de votre activite</p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid-4 mb-8" data-testid="stats-grid">
-        {statCards.map((stat, index) => (
-          <div key={index} className="stat-card" data-testid={`stat-card-${index}`}>
-            <div className="flex items-center justify-between mb-4">
-              <span className="stat-label">{stat.label}</span>
-              <stat.icon size={24} weight="duotone" style={{ color: stat.color }} />
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8" data-testid="stat-cards">
+        {statCards.map((card, i) => (
+          <div key={i} className="bg-white border border-zinc-200 rounded-xl p-5 hover:shadow-md transition-shadow" data-testid={"stat-card-" + i}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2.5 rounded-lg" style={{ backgroundColor: card.bgColor }}>
+                <card.icon size={22} weight="duotone" style={{ color: card.color }} />
+              </div>
             </div>
-            <div className="stat-value" data-testid={`stat-value-${index}`}>
-              {stat.value}
-            </div>
+            <p className="text-2xl font-bold text-zinc-900 font-mono">{card.value}</p>
+            <p className="text-xs text-zinc-500 mt-1">{card.label}</p>
           </div>
         ))}
       </div>
 
-      {/* Charts and Recent Recipes */}
-      <div className="grid-2">
-        {/* Cost Distribution Chart */}
-        <div className="chart-container" data-testid="cost-distribution-chart">
-          <h3 className="chart-title">Répartition Type des Coûts</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie
-                data={costDistributionData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                paddingAngle={2}
-                dataKey="value"
-              >
-                {costDistributionData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip 
-                formatter={(value) => `${value}%`}
-                contentStyle={{ 
-                  backgroundColor: '#fff', 
-                  border: '1px solid #E4E4E7',
-                  borderRadius: '8px',
-                  fontSize: '14px'
-                }}
-              />
-              <Legend 
-                verticalAlign="bottom" 
-                height={36}
-                formatter={(value) => <span style={{ color: '#71717A', fontSize: '14px' }}>{value}</span>}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+      {/* Charts Row 1 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Bar Chart - Cost Breakdown by Recipe */}
+        <div className="lg:col-span-2 bg-white border border-zinc-200 rounded-xl p-6" data-testid="cost-bar-chart">
+          <h3 className="font-semibold text-zinc-900 mb-4">Decomposition des couts par recette</h3>
+          {costBreakdownData.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-zinc-400">Aucune recette avec des couts</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={costBreakdownData} barGap={2}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F4F4F5" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={v => v + " EUR"} tick={{ fontSize: 11 }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: "12px" }} />
+                <Bar dataKey="matieres" name="Matieres" fill="#002FA7" radius={[2, 2, 0, 0]} stackId="cost" />
+                <Bar dataKey="main_oeuvre" name="Main d'oeuvre" fill="#10B981" radius={[0, 0, 0, 0]} stackId="cost" />
+                <Bar dataKey="frais" name="Frais gen." fill="#F59E0B" radius={[2, 2, 0, 0]} stackId="cost" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
-        {/* Recent Recipes */}
-        <div className="chart-container" data-testid="recent-recipes-section">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="chart-title">Recettes Récentes</h3>
-            <button 
-              onClick={() => navigate("/recipes")}
-              className="btn-secondary text-sm"
-              data-testid="view-all-recipes-btn"
-            >
-              Voir tout
-              <ArrowRight size={16} />
-            </button>
+        {/* Pie Chart */}
+        <div className="bg-white border border-zinc-200 rounded-xl p-6" data-testid="cost-pie-chart">
+          <h3 className="font-semibold text-zinc-900 mb-4">Repartition globale</h3>
+          {pieData.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-zinc-400">Aucune donnee</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value"
+                  label={({ name, percent }) => name + " " + (percent * 100).toFixed(0) + "%"} labelLine={false}>
+                  {pieData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                </Pie>
+                <Tooltip formatter={v => v.toFixed(2) + " EUR"} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+          <div className="flex justify-center gap-4 mt-2">
+            {pieData.map((d, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CHART_COLORS[i] }} />
+                <span className="text-xs text-zinc-600">{d.name}</span>
+              </div>
+            ))}
           </div>
-          
-          {stats.recent_recipes.length === 0 ? (
-            <div className="empty-state" data-testid="no-recipes-message">
-              <CookingPot size={48} className="mx-auto mb-4 text-zinc-300" />
-              <p className="empty-state-title">Aucune recette</p>
-              <p className="empty-state-text">Créez votre première recette pour voir les coûts</p>
-              <button 
-                onClick={() => navigate("/recipes")}
-                className="btn-primary"
-                data-testid="create-first-recipe-btn"
-              >
-                Créer une recette
-              </button>
+        </div>
+      </div>
+
+      {/* Charts Row 2 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Area Chart - Prix revient vs Prix vente */}
+        <div className="bg-white border border-zinc-200 rounded-xl p-6" data-testid="price-comparison-chart">
+          <h3 className="font-semibold text-zinc-900 mb-4">Prix de revient vs Prix de vente</h3>
+          {marginData.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-zinc-400">Aucune donnee</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={marginData}>
+                <defs>
+                  <linearGradient id="gradRevient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#002FA7" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#002FA7" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradVente" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F4F4F5" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={v => v + " EUR"} tick={{ fontSize: 11 }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: "12px" }} />
+                <Area type="monotone" dataKey="prix_revient" name="Prix revient" stroke="#002FA7" fill="url(#gradRevient)" strokeWidth={2} />
+                <Area type="monotone" dataKey="prix_vente" name="Prix vente" stroke="#10B981" fill="url(#gradVente)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Recent recipes with cost badges */}
+        <div className="bg-white border border-zinc-200 rounded-xl p-6" data-testid="recent-recipes">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-zinc-900">Dernieres recettes</h3>
+            <Button variant="outline" size="sm" onClick={() => navigate("/recipes")} data-testid="view-all-recipes-btn">
+              Voir tout <ArrowRight size={14} className="ml-1" />
+            </Button>
+          </div>
+          {(!stats?.recent_recipes || stats.recent_recipes.length === 0) ? (
+            <div className="h-48 flex items-center justify-center text-zinc-400">
+              <div className="text-center">
+                <CookingPot size={40} className="mx-auto mb-2 text-zinc-300" />
+                <p>Aucune recette</p>
+              </div>
             </div>
           ) : (
-            <div className="space-y-3" data-testid="recent-recipes-list">
-              {stats.recent_recipes.map((recipe, index) => (
-                <div 
-                  key={recipe.id}
-                  className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg hover:bg-zinc-100 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/recipes/${recipe.id}`)}
-                  data-testid={`recent-recipe-${index}`}
+            <div className="space-y-3">
+              {stats.recent_recipes.map((recipe, i) => (
+                <div key={recipe.id} className="flex items-center justify-between p-3 rounded-lg border border-zinc-100 hover:border-zinc-300 hover:shadow-sm cursor-pointer transition-all"
+                  onClick={() => navigate("/recipes/" + recipe.id)}
+                  data-testid={"recent-recipe-" + i}
                 >
-                  <div>
-                    <p className="font-medium text-zinc-900">{recipe.name}</p>
-                    <p className="text-sm text-zinc-500">{recipe.output_unit}</p>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + "20" }}>
+                      <CookingPot size={18} style={{ color: CHART_COLORS[i % CHART_COLORS.length] }} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-zinc-900 text-sm">{recipe.name}</p>
+                      <p className="text-xs text-zinc-500">par {recipe.output_unit}</p>
+                    </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-mono font-semibold text-zinc-900">
-                      {recipe.cost_per_unit.toFixed(2)} €
-                    </p>
-                    <p className="text-xs text-zinc-500">par unité</p>
+                    <p className="font-mono font-bold text-zinc-900">{recipe.cost_per_unit.toFixed(2)} EUR</p>
+                    <p className="text-xs font-mono text-green-600">{recipe.suggested_price.toFixed(2)} EUR vente</p>
                   </div>
                 </div>
               ))}
@@ -196,37 +219,28 @@ const Dashboard = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="mt-8 grid-3" data-testid="quick-actions">
-        <div 
-          className="stat-card cursor-pointer hover:border-[#002FA7] transition-colors"
-          onClick={() => navigate("/materials")}
-          data-testid="quick-action-materials"
-        >
-          <Package size={32} weight="duotone" className="text-[#002FA7] mb-3" />
-          <h4 className="font-semibold text-zinc-900 mb-1">Gérer les Matières</h4>
-          <p className="text-sm text-zinc-500">Ajouter ou modifier les matières premières</p>
-        </div>
-        <div 
-          className="stat-card cursor-pointer hover:border-[#10B981] transition-colors"
-          onClick={() => navigate("/recipes")}
-          data-testid="quick-action-recipes"
-        >
-          <CookingPot size={32} weight="duotone" className="text-[#10B981] mb-3" />
-          <h4 className="font-semibold text-zinc-900 mb-1">Créer une Recette</h4>
-          <p className="text-sm text-zinc-500">Définir une nouvelle recette de production</p>
-        </div>
-        <div 
-          className="stat-card cursor-pointer hover:border-[#F59E0B] transition-colors"
-          onClick={() => navigate("/overheads")}
-          data-testid="quick-action-overheads"
-        >
-          <Gear size={32} weight="duotone" className="text-[#F59E0B] mb-3" />
-          <h4 className="font-semibold text-zinc-900 mb-1">Configurer les Frais</h4>
-          <p className="text-sm text-zinc-500">Paramétrer les frais généraux</p>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="quick-actions">
+        <button onClick={() => navigate("/materials")} className="p-5 bg-gradient-to-br from-blue-500 to-blue-700 text-white rounded-xl hover:shadow-lg transition-shadow" data-testid="quick-materials">
+          <Package size={28} className="mb-2" weight="duotone" />
+          <p className="font-semibold text-sm">Matieres premieres</p>
+          <p className="text-xs text-blue-100 mt-1">Gerer le catalogue</p>
+        </button>
+        <button onClick={() => navigate("/recipes")} className="p-5 bg-gradient-to-br from-emerald-500 to-emerald-700 text-white rounded-xl hover:shadow-lg transition-shadow" data-testid="quick-recipes">
+          <CookingPot size={28} className="mb-2" weight="duotone" />
+          <p className="font-semibold text-sm">Recettes</p>
+          <p className="text-xs text-emerald-100 mt-1">Calculer les couts</p>
+        </button>
+        <button onClick={() => navigate("/bom")} className="p-5 bg-gradient-to-br from-amber-500 to-amber-700 text-white rounded-xl hover:shadow-lg transition-shadow" data-testid="quick-bom">
+          <TreeStructure size={28} className="mb-2" weight="duotone" />
+          <p className="font-semibold text-sm">Arbre fabrication</p>
+          <p className="text-xs text-amber-100 mt-1">Visualiser la structure</p>
+        </button>
+        <button onClick={() => navigate("/costs-table")} className="p-5 bg-gradient-to-br from-purple-500 to-purple-700 text-white rounded-xl hover:shadow-lg transition-shadow" data-testid="quick-costs">
+          <ChartPie size={28} className="mb-2" weight="duotone" />
+          <p className="font-semibold text-sm">Tableau des couts</p>
+          <p className="text-xs text-purple-100 mt-1">Exporter en Excel</p>
+        </button>
       </div>
     </div>
   );
-};
-
-export default Dashboard;
+}

@@ -25,6 +25,9 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+import base64
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -1462,43 +1465,208 @@ async def export_recipe_pdf(recipe_id: str):
     filename = f"prix_revient_{cost.recipe_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf"
     return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={filename}"})
 
-# ================= EXCEL EXPORT =================
+# ================= EXCEL EXPORT (XLSX) =================
 
 @api_router.get("/reports/export-excel")
-async def export_all_costs_excel():
-    """Export all costs as CSV (Excel compatible)"""
+async def export_all_costs_xlsx():
+    """Export all costs as real XLSX file"""
     recipes = await db.recipes.find({}, {"_id": 0}).to_list(1000)
     
-    output = StringIO()
-    writer = csv.writer(output, delimiter=';')
-    writer.writerow(['Recette', 'Catégorie', 'Quantité', 'Unité', 'Coût Matières', 'Coût Main d\'œuvre', 'Coût Frais Généraux', 'Coût Freinte', 'Coût Total', 'Prix/Unité', 'Marge %', 'Prix Conseillé'])
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Tableau des couts"
+    
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="002FA7", end_color="002FA7", fill_type="solid")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    border = Border(
+        left=Side(style="thin"), right=Side(style="thin"),
+        top=Side(style="thin"), bottom=Side(style="thin")
+    )
+    
+    headers = ["Recette", "Type", "Qte produite", "Unite", "Cout Matieres", "Cout Main oeuvre",
+               "Cout Frais Gen.", "Cout Freinte", "Cout Total", "Prix/Unite", "Marge %", "Prix Conseille"]
+    
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        cell.border = border
+    
+    row_num = 2
+    money_fmt = '#,##0.00 "EUR"'
     
     for recipe in recipes:
         try:
-            cost = await calculate_cost(recipe['id'])
-            writer.writerow([
-                recipe['name'],
-                recipe.get('category_id', ''),
-                recipe.get('output_quantity', 1),
-                recipe.get('output_unit', 'pièce'),
-                f"{cost.total_material_cost:.2f}".replace('.', ','),
-                f"{cost.total_labor_cost:.2f}".replace('.', ','),
-                f"{cost.total_overhead_cost:.2f}".replace('.', ','),
-                f"{cost.total_freinte_cost:.2f}".replace('.', ','),
-                f"{cost.total_cost:.2f}".replace('.', ','),
-                f"{cost.cost_per_unit:.2f}".replace('.', ','),
-                f"{cost.target_margin:.1f}".replace('.', ','),
-                f"{cost.suggested_price:.2f}".replace('.', ',')
-            ])
+            cost = await calculate_cost(recipe["id"])
+            rtype = "Semi-fini" if recipe.get("is_intermediate") else "Produit fini"
+            values = [
+                recipe["name"], rtype, recipe.get("output_quantity", 1), recipe.get("output_unit", "piece"),
+                cost.total_material_cost, cost.total_labor_cost, cost.total_overhead_cost,
+                cost.total_freinte_cost, cost.total_cost, cost.cost_per_unit,
+                cost.target_margin, cost.suggested_price
+            ]
+            for col, val in enumerate(values, 1):
+                cell = ws.cell(row=row_num, column=col, value=val)
+                cell.border = border
+                if col >= 5:
+                    cell.number_format = money_fmt if col != 11 else '0.0"%"'
+                    cell.alignment = Alignment(horizontal="right")
+            
+            if recipe.get("is_intermediate"):
+                for col in range(1, len(headers) + 1):
+                    ws.cell(row=row_num, column=col).fill = PatternFill(start_color="FFF8E1", end_color="FFF8E1", fill_type="solid")
+            row_num += 1
         except:
             continue
     
+    # Auto-width
+    for col in range(1, len(headers) + 1):
+        max_len = len(str(headers[col - 1]))
+        for row in range(2, row_num):
+            val = ws.cell(row=row, column=col).value
+            if val:
+                max_len = max(max_len, len(str(val)))
+        ws.column_dimensions[chr(64 + col) if col <= 26 else "A"].width = min(max_len + 4, 30)
+    
+    # Total row
+    if row_num > 2:
+        total_row = row_num
+        ws.cell(row=total_row, column=1, value="TOTAL").font = Font(bold=True, size=11)
+        for col in [5, 6, 7, 8, 9]:
+            cell = ws.cell(row=total_row, column=col)
+            cell.value = f"=SUM({chr(64+col)}2:{chr(64+col)}{row_num-1})"
+            cell.font = Font(bold=True)
+            cell.number_format = money_fmt
+            cell.border = border
+            cell.fill = PatternFill(start_color="E8EAF6", end_color="E8EAF6", fill_type="solid")
+    
+    output = BytesIO()
+    wb.save(output)
     output.seek(0)
+    
     return StreamingResponse(
-        BytesIO(output.getvalue().encode('utf-8-sig')),
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=rapport_couts_{datetime.now().strftime('%Y%m%d')}.csv"}
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=rapport_couts_{datetime.now().strftime('%Y%m%d')}.xlsx"}
     )
+
+# ================= APP SETTINGS =================
+
+DEFAULT_SETTINGS = {
+    "primary_color": "#002FA7",
+    "secondary_color": "#10B981",
+    "accent_color": "#F59E0B",
+    "danger_color": "#EF4444",
+    "sidebar_bg": "#F4F4F5",
+    "sidebar_text": "#71717A",
+    "sidebar_active_bg": "#002FA7",
+    "sidebar_active_text": "#FFFFFF",
+    "company_name": "PrixRevient",
+    "logo_data": "",
+    "sso_enabled": False,
+    "sso_provider": "",
+    "sso_client_id": "",
+    "sso_domain": "",
+}
+
+@api_router.get("/settings")
+async def get_settings():
+    settings = await db.settings.find_one({"key": "app_settings"}, {"_id": 0})
+    if not settings:
+        return DEFAULT_SETTINGS
+    settings.pop("key", None)
+    merged = {**DEFAULT_SETTINGS, **settings}
+    return merged
+
+@api_router.put("/settings")
+async def update_settings(request: Request, admin: dict = Depends(require_admin)):
+    data = await request.json()
+    data.pop("key", None)
+    data.pop("_id", None)
+    data["key"] = "app_settings"
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    data["updated_by"] = admin["_id"]
+    await db.settings.update_one({"key": "app_settings"}, {"$set": data}, upsert=True)
+    result = await db.settings.find_one({"key": "app_settings"}, {"_id": 0})
+    result.pop("key", None)
+    return {**DEFAULT_SETTINGS, **result}
+
+@api_router.post("/settings/logo")
+async def upload_logo(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Le fichier doit etre une image")
+    content = await file.read()
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image trop volumineuse (max 2 Mo)")
+    b64 = base64.b64encode(content).decode("utf-8")
+    logo_data = f"data:{file.content_type};base64,{b64}"
+    await db.settings.update_one(
+        {"key": "app_settings"},
+        {"$set": {"logo_data": logo_data, "key": "app_settings"}},
+        upsert=True
+    )
+    return {"logo_data": logo_data}
+
+@api_router.delete("/settings/logo")
+async def delete_logo(admin: dict = Depends(require_admin)):
+    await db.settings.update_one({"key": "app_settings"}, {"$set": {"logo_data": ""}})
+    return {"message": "Logo supprime"}
+
+# ================= CRONTAB MANAGEMENT =================
+
+@api_router.get("/crontabs")
+async def get_crontabs(admin: dict = Depends(require_admin)):
+    crontabs = await db.crontabs.find({}, {"_id": 0}).to_list(100)
+    return crontabs
+
+@api_router.post("/crontabs")
+async def create_crontab(request: Request, admin: dict = Depends(require_admin)):
+    data = await request.json()
+    crontab = {
+        "id": str(uuid.uuid4()),
+        "name": data.get("name", "Import automatique"),
+        "type": data.get("type", "sftp_scan"),
+        "schedule": data.get("schedule", "*/30 * * * *"),
+        "enabled": data.get("enabled", True),
+        "last_run": None,
+        "last_result": None,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.crontabs.insert_one(crontab)
+    crontab.pop("_id", None)
+    return crontab
+
+@api_router.put("/crontabs/{crontab_id}")
+async def update_crontab(crontab_id: str, request: Request, admin: dict = Depends(require_admin)):
+    data = await request.json()
+    data.pop("_id", None)
+    data.pop("id", None)
+    await db.crontabs.update_one({"id": crontab_id}, {"$set": data})
+    result = await db.crontabs.find_one({"id": crontab_id}, {"_id": 0})
+    return result
+
+@api_router.delete("/crontabs/{crontab_id}")
+async def delete_crontab(crontab_id: str, admin: dict = Depends(require_admin)):
+    await db.crontabs.delete_one({"id": crontab_id})
+    return {"message": "Crontab supprime"}
+
+@api_router.post("/crontabs/{crontab_id}/run")
+async def run_crontab_now(crontab_id: str, admin: dict = Depends(require_admin)):
+    crontab = await db.crontabs.find_one({"id": crontab_id}, {"_id": 0})
+    if not crontab:
+        raise HTTPException(status_code=404, detail="Crontab non trouve")
+    
+    result = None
+    if crontab["type"] == "sftp_scan":
+        result = await sftp_scan()
+    
+    await db.crontabs.update_one({"id": crontab_id}, {"$set": {
+        "last_run": datetime.now(timezone.utc).isoformat(),
+        "last_result": str(result) if result else "OK"
+    }})
+    return {"message": "Execute", "result": result}
 
 # ================= DASHBOARD STATS =================
 
