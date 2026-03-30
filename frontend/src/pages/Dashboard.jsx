@@ -20,7 +20,7 @@ export default function Dashboard() {
   useEffect(() => {
     Promise.all([
       axios.get(API + "/dashboard/stats").then(r => setStats(r.data)).catch(() => {}),
-      axios.get(API + "/costs/all").then(r => setAllCosts(r.data)).catch(() => {}),
+      axios.get(API + "/reports/all-costs").then(r => setAllCosts(r.data)).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
 
