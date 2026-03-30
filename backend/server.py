@@ -1824,23 +1824,16 @@ logger = logging.getLogger(__name__)
 async def startup_event():
     await db.users.create_index("email", unique=True)
     
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "Admin123!")
-    
-    existing = await db.users.find_one({"email": admin_email})
-    if not existing:
-        hashed = hash_password(admin_password)
-        await db.users.insert_one({"email": admin_email, "password_hash": hashed, "name": "Admin", "role": "admin", "is_active": True, "created_at": datetime.now(timezone.utc)})
-        logger.info(f"Admin user created: {admin_email}")
-    else:
-        # Ensure admin has is_active and role
-        update = {}
-        if "is_active" not in existing:
-            update["is_active"] = True
-        if existing.get("role") != "admin":
-            update["role"] = "admin"
-        if update:
-            await db.users.update_one({"_id": existing["_id"]}, {"$set": update})
+    # Only seed admin if NO admin user exists at all
+    any_admin = await db.users.find_one({"role": "admin"})
+    if not any_admin:
+        admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com")
+        admin_password = os.environ.get("ADMIN_PASSWORD", "Admin123!")
+        existing = await db.users.find_one({"email": admin_email})
+        if not existing:
+            hashed = hash_password(admin_password)
+            await db.users.insert_one({"email": admin_email, "password_hash": hashed, "name": "Admin", "role": "admin", "is_active": True, "created_at": datetime.now(timezone.utc)})
+            logger.info(f"Admin user created: {admin_email}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
