@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Plus, Eye, Pencil, Trash, CookingPot, Calculator, UploadSimple, DownloadSimple, FileText, TreeStructure } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ const OUTPUT_UNITS = [
 const Recipes = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const { isManager } = useAuth();
   const [recipes, setRecipes] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -191,12 +193,16 @@ const Recipes = () => {
           <p className="page-subtitle">Definissez vos recettes et calculez les prix de revient</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} data-testid="import-csv-btn">
-            <UploadSimple size={20} className="mr-2" /> Importer CSV
-          </Button>
-          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="bg-[#002FA7] hover:bg-[#002482]" data-testid="add-recipe-btn">
-            <Plus size={20} className="mr-2" /> Nouvelle recette
-          </Button>
+          {isManager && (
+            <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} data-testid="import-csv-btn">
+              <UploadSimple size={20} className="mr-2" /> Importer CSV
+            </Button>
+          )}
+          {isManager && (
+            <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="bg-[#002FA7] hover:bg-[#002482]" data-testid="add-recipe-btn">
+              <Plus size={20} className="mr-2" /> Nouvelle recette
+            </Button>
+          )}
         </div>
       </div>
 
@@ -241,12 +247,16 @@ const Recipes = () => {
                     </p>
                   </div>
                   <div className="flex gap-1 shrink-0 ml-2">
-                    <button onClick={(e) => handleEdit(recipe, e)} className="p-2 hover:bg-zinc-100 rounded-md" data-testid={`edit-recipe-${index}`}>
-                      <Pencil size={16} className="text-zinc-600" />
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); setSelectedRecipe(recipe); setIsDeleteDialogOpen(true); }} className="p-2 hover:bg-red-50 rounded-md" data-testid={`delete-recipe-${index}`}>
-                      <Trash size={16} className="text-red-500" />
-                    </button>
+                    {isManager && (
+                      <button onClick={(e) => handleEdit(recipe, e)} className="p-2 hover:bg-zinc-100 rounded-md" data-testid={`edit-recipe-${index}`}>
+                        <Pencil size={16} className="text-zinc-600" />
+                      </button>
+                    )}
+                    {isManager && (
+                      <button onClick={(e) => { e.stopPropagation(); setSelectedRecipe(recipe); setIsDeleteDialogOpen(true); }} className="p-2 hover:bg-red-50 rounded-md" data-testid={`delete-recipe-${index}`}>
+                        <Trash size={16} className="text-red-500" />
+                      </button>
+                    )}
                   </div>
                 </div>
 

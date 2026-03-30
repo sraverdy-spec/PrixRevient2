@@ -16,27 +16,32 @@ import {
   ChartLine,
   Table,
   TreeStructure,
-  CloudArrowUp
+  CloudArrowUp,
+  UsersThree
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const Layout = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin, isManager } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
 
   const navItems = [
-    { to: "/", icon: House, label: "Tableau de bord" },
-    { to: "/materials", icon: Package, label: "Matieres premieres" },
-    { to: "/recipes", icon: CookingPot, label: "Recettes" },
-    { to: "/bom", icon: TreeStructure, label: "Arbre fabrication" },
-    { to: "/overheads", icon: Gear, label: "Frais generaux" },
-    { to: "/suppliers", icon: Truck, label: "Fournisseurs" },
-    { to: "/categories", icon: Tag, label: "Categories" },
-    { to: "/costs-table", icon: Table, label: "Tableau des couts" },
-    { to: "/comparison", icon: ChartLine, label: "Comparaison" },
-    { to: "/import-center", icon: CloudArrowUp, label: "Centre d'import" },
+    { to: "/", icon: House, label: "Tableau de bord", roles: ["admin", "manager", "operator"] },
+    { to: "/materials", icon: Package, label: "Matieres premieres", roles: ["admin", "manager", "operator"] },
+    { to: "/recipes", icon: CookingPot, label: "Recettes", roles: ["admin", "manager", "operator"] },
+    { to: "/bom", icon: TreeStructure, label: "Arbre fabrication", roles: ["admin", "manager", "operator"] },
+    { to: "/overheads", icon: Gear, label: "Frais generaux", roles: ["admin", "manager"] },
+    { to: "/suppliers", icon: Truck, label: "Fournisseurs", roles: ["admin", "manager"] },
+    { to: "/categories", icon: Tag, label: "Categories", roles: ["admin", "manager"] },
+    { to: "/costs-table", icon: Table, label: "Tableau des couts", roles: ["admin", "manager", "operator"] },
+    { to: "/comparison", icon: ChartLine, label: "Comparaison", roles: ["admin", "manager"] },
+    { to: "/import-center", icon: CloudArrowUp, label: "Centre d'import", roles: ["admin"] },
+    { to: "/users", icon: UsersThree, label: "Utilisateurs", roles: ["admin"] },
   ];
+
+  const userRole = user?.role || "operator";
+  const visibleNavItems = navItems.filter(item => item.roles.includes(userRole));
 
   const handleLogout = async () => {
     try {
@@ -68,7 +73,7 @@ const Layout = () => {
         </button>
         
         <nav className="sidebar-nav flex-1 overflow-y-auto" data-testid="sidebar-nav">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -97,6 +102,13 @@ const Layout = () => {
                 </p>
                 <p className="text-xs text-zinc-500 truncate" data-testid="user-email">
                   {user?.email}
+                </p>
+                <p className="text-[10px] mt-0.5">
+                  <span className={
+                    user?.role === 'admin' ? 'px-1.5 py-0.5 bg-red-100 text-red-700 rounded font-medium' :
+                    user?.role === 'manager' ? 'px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium' :
+                    'px-1.5 py-0.5 bg-zinc-100 text-zinc-600 rounded font-medium'
+                  }>{user?.role === 'admin' ? 'Admin' : user?.role === 'manager' ? 'Manager' : 'Operateur'}</span>
                 </p>
               </div>
             </div>

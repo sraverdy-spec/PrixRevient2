@@ -76,6 +76,10 @@ export const AuthProvider = ({ children }) => {
     logout,
     refreshToken,
     isAuthenticated: !!user && user !== false,
+    isAdmin: user && user.role === "admin",
+    isManager: user && (user.role === "admin" || user.role === "manager"),
+    isOperator: user && user.role === "operator",
+    role: user ? user.role : null,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

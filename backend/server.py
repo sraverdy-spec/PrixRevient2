@@ -63,21 +63,35 @@ async def get_current_user(request: Request) -> dict:
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
     if not token:
-        raise HTTPException(status_code=401, detail="Non authentifié")
+        raise HTTPException(status_code=401, detail="Non authentifie")
     try:
         payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         if payload.get("type") != "access":
             raise HTTPException(status_code=401, detail="Type de token invalide")
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
-            raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
+            raise HTTPException(status_code=401, detail="Utilisateur non trouve")
         user["_id"] = str(user["_id"])
         user.pop("password_hash", None)
         return user
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expiré")
+        raise HTTPException(status_code=401, detail="Token expire")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token invalide")
+
+VALID_ROLES = ["admin", "manager", "operator"]
+
+def require_role(*roles):
+    """Dependency factory: returns a dependency that checks the user has one of the given roles."""
+    async def role_checker(request: Request):
+        user = await get_current_user(request)
+        if user.get("role") not in roles:
+            raise HTTPException(status_code=403, detail="Acces interdit - role insuffisant")
+        return user
+    return role_checker
+
+require_admin = require_role("admin")
+require_manager_or_admin = require_role("admin", "manager")
 
 # ================= MODELS =================
 
@@ -90,6 +104,22 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+class UserCreate(BaseModel):
+    """Admin creates a user"""
+    email: EmailStr
+    password: str
+    name: str
+    role: str = "operator"
+
+class UserUpdate(BaseModel):
+    """Admin updates a user"""
+    name: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class UserChangePassword(BaseModel):
+    new_password: str
 
 # Category Model
 class CategoryBase(BaseModel):
@@ -238,21 +268,8 @@ class SimulationRequest(BaseModel):
 
 @api_router.post("/auth/register")
 async def register(input_data: UserRegister, response: Response):
-    email = input_data.email.lower()
-    existing = await db.users.find_one({"email": email})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email déjà utilisé")
-    
-    password_hash = hash_password(input_data.password)
-    user_doc = {"email": email, "password_hash": password_hash, "name": input_data.name, "role": "user", "created_at": datetime.now(timezone.utc)}
-    result = await db.users.insert_one(user_doc)
-    user_id = str(result.inserted_id)
-    
-    access_token = create_access_token(user_id, email)
-    refresh_token = create_refresh_token(user_id)
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=3600, path="/")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
-    return {"_id": user_id, "email": email, "name": input_data.name, "role": "user"}
+    """Registration disabled - admin creates accounts via /api/users"""
+    raise HTTPException(status_code=403, detail="Inscription desactivee. Contactez l'administrateur pour obtenir un compte.")
 
 @api_router.post("/auth/login")
 async def login(input_data: UserLogin, request: Request, response: Response):
@@ -261,12 +278,15 @@ async def login(input_data: UserLogin, request: Request, response: Response):
     if not user or not verify_password(input_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
     
+    if user.get("is_active") is False:
+        raise HTTPException(status_code=403, detail="Compte desactive. Contactez l'administrateur.")
+    
     user_id = str(user["_id"])
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
     response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=3600, path="/")
     response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
-    return {"_id": user_id, "email": user["email"], "name": user["name"], "role": user["role"]}
+    return {"_id": user_id, "email": user["email"], "name": user["name"], "role": user.get("role", "operator")}
 
 @api_router.post("/auth/logout")
 async def logout(response: Response):
@@ -282,21 +302,109 @@ async def get_me(request: Request):
 async def refresh_token(request: Request, response: Response):
     token = request.cookies.get("refresh_token")
     if not token:
-        raise HTTPException(status_code=401, detail="Token de rafraîchissement manquant")
+        raise HTTPException(status_code=401, detail="Token de rafraichissement manquant")
     try:
         payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Type de token invalide")
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
-            raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
+            raise HTTPException(status_code=401, detail="Utilisateur non trouve")
         access_token = create_access_token(str(user["_id"]), user["email"])
         response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=3600, path="/")
-        return {"message": "Token rafraîchi"}
+        return {"message": "Token rafraichi"}
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expiré")
+        raise HTTPException(status_code=401, detail="Token expire")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token invalide")
+
+# ================= USER MANAGEMENT (Admin Only) =================
+
+@api_router.get("/users")
+async def list_users(admin: dict = Depends(require_admin)):
+    """List all users (admin only)"""
+    users = await db.users.find({}, {"password_hash": 0}).to_list(1000)
+    for u in users:
+        u["_id"] = str(u["_id"])
+    return users
+
+@api_router.post("/users")
+async def create_user(input_data: UserCreate, admin: dict = Depends(require_admin)):
+    """Create a new user (admin only)"""
+    email = input_data.email.lower()
+    if input_data.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Role invalide. Roles valides: {', '.join(VALID_ROLES)}")
+    
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email deja utilise")
+    
+    password_hash = hash_password(input_data.password)
+    user_doc = {
+        "email": email,
+        "password_hash": password_hash,
+        "name": input_data.name,
+        "role": input_data.role,
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc),
+        "created_by": admin["_id"]
+    }
+    result = await db.users.insert_one(user_doc)
+    return {"_id": str(result.inserted_id), "email": email, "name": input_data.name, "role": input_data.role, "is_active": True}
+
+@api_router.put("/users/{user_id}")
+async def update_user(user_id: str, input_data: UserUpdate, admin: dict = Depends(require_admin)):
+    """Update user role or status (admin only)"""
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+    
+    # Prevent admin from demoting themselves
+    if str(user["_id"]) == admin["_id"] and input_data.role and input_data.role != "admin":
+        raise HTTPException(status_code=400, detail="Impossible de modifier votre propre role admin")
+    
+    update = {}
+    if input_data.name is not None:
+        update["name"] = input_data.name
+    if input_data.role is not None:
+        if input_data.role not in VALID_ROLES:
+            raise HTTPException(status_code=400, detail=f"Role invalide. Roles valides: {', '.join(VALID_ROLES)}")
+        update["role"] = input_data.role
+    if input_data.is_active is not None:
+        if str(user["_id"]) == admin["_id"]:
+            raise HTTPException(status_code=400, detail="Impossible de desactiver votre propre compte")
+        update["is_active"] = input_data.is_active
+    
+    if update:
+        update["updated_at"] = datetime.now(timezone.utc)
+        await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update})
+    
+    updated = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
+    updated["_id"] = str(updated["_id"])
+    return updated
+
+@api_router.put("/users/{user_id}/password")
+async def change_user_password(user_id: str, input_data: UserChangePassword, admin: dict = Depends(require_admin)):
+    """Reset a user's password (admin only)"""
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+    
+    new_hash = hash_password(input_data.new_password)
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"password_hash": new_hash, "updated_at": datetime.now(timezone.utc)}})
+    return {"message": "Mot de passe modifie"}
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, admin: dict = Depends(require_admin)):
+    """Delete a user (admin only)"""
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+    if str(user["_id"]) == admin["_id"]:
+        raise HTTPException(status_code=400, detail="Impossible de supprimer votre propre compte")
+    
+    await db.users.delete_one({"_id": ObjectId(user_id)})
+    return {"message": "Utilisateur supprime"}
 
 # ================= CATEGORIES ENDPOINTS =================
 
@@ -1469,8 +1577,17 @@ async def startup_event():
     existing = await db.users.find_one({"email": admin_email})
     if not existing:
         hashed = hash_password(admin_password)
-        await db.users.insert_one({"email": admin_email, "password_hash": hashed, "name": "Admin", "role": "admin", "created_at": datetime.now(timezone.utc)})
+        await db.users.insert_one({"email": admin_email, "password_hash": hashed, "name": "Admin", "role": "admin", "is_active": True, "created_at": datetime.now(timezone.utc)})
         logger.info(f"Admin user created: {admin_email}")
+    else:
+        # Ensure admin has is_active and role
+        update = {}
+        if "is_active" not in existing:
+            update["is_active"] = True
+        if existing.get("role") != "admin":
+            update["role"] = "admin"
+        if update:
+            await db.users.update_one({"_id": existing["_id"]}, {"$set": update})
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

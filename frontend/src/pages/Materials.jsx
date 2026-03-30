@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { Plus, Pencil, Trash, Package, UploadSimple, DownloadSimple, FileText, MagnifyingGlass } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +31,7 @@ const UNITS = [
 ];
 
 const Materials = () => {
+  const { isManager } = useAuth();
   const [materials, setMaterials] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -185,12 +187,16 @@ const Materials = () => {
           <p className="page-subtitle">Gerez votre catalogue de matieres premieres</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} data-testid="import-materials-csv-btn">
-            <UploadSimple size={18} className="mr-2" /> Importer CSV
-          </Button>
-          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="bg-[#002FA7] hover:bg-[#002482]" data-testid="add-material-btn">
-            <Plus size={20} className="mr-2" /> Ajouter
-          </Button>
+          {isManager && (
+            <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} data-testid="import-materials-csv-btn">
+              <UploadSimple size={18} className="mr-2" /> Importer CSV
+            </Button>
+          )}
+          {isManager && (
+            <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="bg-[#002FA7] hover:bg-[#002482]" data-testid="add-material-btn">
+              <Plus size={20} className="mr-2" /> Ajouter
+            </Button>
+          )}
         </div>
       </div>
 
@@ -252,14 +258,16 @@ const Materials = () => {
                   <td className="text-zinc-500">{material.supplier_name || "-"}</td>
                   <td className="text-zinc-500">{getCategoryName(material.category_id) || "-"}</td>
                   <td className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => handleEdit(material)} className="p-2 hover:bg-zinc-100 rounded-md transition-colors" data-testid={`edit-material-${index}`}>
-                        <Pencil size={16} className="text-zinc-600" />
-                      </button>
-                      <button onClick={() => { setSelectedMaterial(material); setIsDeleteDialogOpen(true); }} className="p-2 hover:bg-red-50 rounded-md transition-colors" data-testid={`delete-material-${index}`}>
-                        <Trash size={16} className="text-red-500" />
-                      </button>
-                    </div>
+                    {isManager && (
+                      <div className="flex items-center justify-end gap-2">
+                        <button onClick={() => handleEdit(material)} className="p-2 hover:bg-zinc-100 rounded-md transition-colors" data-testid={`edit-material-${index}`}>
+                          <Pencil size={16} className="text-zinc-600" />
+                        </button>
+                        <button onClick={() => { setSelectedMaterial(material); setIsDeleteDialogOpen(true); }} className="p-2 hover:bg-red-50 rounded-md transition-colors" data-testid={`delete-material-${index}`}>
+                          <Trash size={16} className="text-red-500" />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
