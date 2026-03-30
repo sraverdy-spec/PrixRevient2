@@ -92,11 +92,7 @@ const Login = () => {
           </p>
         </div>
 
-        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm" data-testid="demo-credentials">
-          <p className="font-medium text-blue-900 mb-1">Compte de demonstration :</p>
-          <p className="text-blue-700">Email: admin@example.com</p>
-          <p className="text-blue-700">Mot de passe: Admin123!</p>
-        </div>
+        {/* fin */}
       </div>
     </div>
   );
