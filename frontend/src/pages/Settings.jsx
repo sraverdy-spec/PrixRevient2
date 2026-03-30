@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Gear, Palette, Image, Users, CloudArrowUp, Timer, Plugs, UploadSimple, Trash, Play, Plus, FloppyDisk } from "@phosphor-icons/react";
+import { Gear, Palette, Image, Users, CloudArrowUp, Timer, Plugs, UploadSimple, Trash, Play, Plus, FloppyDisk, Ruler, Pencil } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -50,9 +50,13 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [isCronDialogOpen, setIsCronDialogOpen] = useState(false);
   const [cronForm, setCronForm] = useState({ name: "", type: "sftp_scan", schedule: "*/30 * * * *", enabled: true });
+  const [units, setUnits] = useState([]);
+  const [isUnitDialogOpen, setIsUnitDialogOpen] = useState(false);
+  const [editingUnit, setEditingUnit] = useState(null);
+  const [unitForm, setUnitForm] = useState({ name: "", abbreviation: "", type: "quantite" });
 
   useEffect(() => {
-    Promise.all([fetchSettings(), fetchCrontabs()]).finally(() => setLoading(false));
+    Promise.all([fetchSettings(), fetchCrontabs(), fetchUnits()]).finally(() => setLoading(false));
   }, []);
 
   const fetchSettings = async () => {
@@ -60,6 +64,35 @@ export default function Settings() {
   };
   const fetchCrontabs = async () => {
     try { setCrontabs((await axios.get(API + "/crontabs")).data); } catch {}
+  };
+
+  const fetchUnits = async () => {
+    try { setUnits((await axios.get(API + "/units")).data); } catch {}
+  };
+
+  const handleSaveUnit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingUnit) {
+        await axios.put(API + "/units/" + editingUnit.id, unitForm);
+        toast.success("Unite mise a jour");
+      } else {
+        await axios.post(API + "/units", unitForm);
+        toast.success("Unite creee");
+      }
+      setIsUnitDialogOpen(false);
+      setEditingUnit(null);
+      setUnitForm({ name: "", abbreviation: "", type: "quantite" });
+      fetchUnits();
+    } catch { toast.error("Erreur"); }
+  };
+
+  const handleDeleteUnit = async (id) => {
+    try {
+      await axios.delete(API + "/units/" + id);
+      toast.success("Unite supprimee");
+      fetchUnits();
+    } catch { toast.error("Erreur"); }
   };
 
   const handleSaveSettings = async () => {
@@ -157,6 +190,7 @@ export default function Settings() {
           <TabsTrigger value="users" data-testid="tab-users"><Users size={16} className="mr-2" /> Utilisateurs</TabsTrigger>
           <TabsTrigger value="import" data-testid="tab-import"><CloudArrowUp size={16} className="mr-2" /> Import</TabsTrigger>
           <TabsTrigger value="crontabs" data-testid="tab-crontabs"><Timer size={16} className="mr-2" /> Taches planifiees</TabsTrigger>
+          <TabsTrigger value="units" data-testid="tab-units"><Ruler size={16} className="mr-2" /> Unites</TabsTrigger>
           <TabsTrigger value="sso" data-testid="tab-sso"><Plugs size={16} className="mr-2" /> SSO</TabsTrigger>
         </TabsList>
 
@@ -334,6 +368,80 @@ export default function Settings() {
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsCronDialogOpen(false)}>Annuler</Button>
                   <Button type="submit" style={{ backgroundColor: settings.primary_color }} data-testid="cron-submit-btn">Creer</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
+        {/* ===== UNITS TAB ===== */}
+        <TabsContent value="units">
+          <div className="bg-white border border-zinc-200 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-semibold text-zinc-900 flex items-center gap-2"><Ruler size={20} /> Unites de mesure</h3>
+              <Button onClick={() => { setEditingUnit(null); setUnitForm({ name: "", abbreviation: "", type: "quantite" }); setIsUnitDialogOpen(true); }} style={{ backgroundColor: settings.primary_color }} data-testid="add-unit-btn">
+                <Plus size={16} className="mr-2" /> Nouvelle unite
+              </Button>
+            </div>
+            {["poids", "volume", "quantite", "longueur"].map(type => {
+              const typeUnits = units.filter(u => u.type === type);
+              if (typeUnits.length === 0) return null;
+              const typeLabels = { poids: "Poids", volume: "Volume", quantite: "Quantite", longueur: "Longueur" };
+              return (
+                <div key={type} className="mb-4">
+                  <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">{typeLabels[type] || type}</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {typeUnits.map(u => (
+                      <div key={u.id} className="flex items-center justify-between p-3 border border-zinc-200 rounded-lg" data-testid={"unit-" + u.id}>
+                        <div>
+                          <span className="font-medium text-sm">{u.name}</span>
+                          <span className="text-xs text-zinc-400 ml-2">({u.abbreviation})</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => { setEditingUnit(u); setUnitForm({ name: u.name, abbreviation: u.abbreviation, type: u.type }); setIsUnitDialogOpen(true); }} className="p-1 hover:bg-zinc-100 rounded" data-testid={"edit-unit-" + u.id}>
+                            <Pencil size={14} className="text-zinc-500" />
+                          </button>
+                          <button onClick={() => handleDeleteUnit(u.id)} className="p-1 hover:bg-red-50 rounded" data-testid={"delete-unit-" + u.id}>
+                            <Trash size={14} className="text-red-500" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <Dialog open={isUnitDialogOpen} onOpenChange={setIsUnitDialogOpen}>
+            <DialogContent className="sm:max-w-[400px]" data-testid="unit-dialog">
+              <DialogHeader><DialogTitle>{editingUnit ? "Modifier l'unite" : "Nouvelle unite"}</DialogTitle></DialogHeader>
+              <form onSubmit={handleSaveUnit}>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Nom</Label>
+                    <Input value={unitForm.name} onChange={e => setUnitForm({ ...unitForm, name: e.target.value })} placeholder="Ex: Kilogramme" required data-testid="unit-name-input" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Abreviation</Label>
+                    <Input value={unitForm.abbreviation} onChange={e => setUnitForm({ ...unitForm, abbreviation: e.target.value })} placeholder="Ex: kg" required data-testid="unit-abbr-input" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Type</Label>
+                    <Select value={unitForm.type} onValueChange={v => setUnitForm({ ...unitForm, type: v })}>
+                      <SelectTrigger data-testid="unit-type-select"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="poids">Poids</SelectItem>
+                        <SelectItem value="volume">Volume</SelectItem>
+                        <SelectItem value="quantite">Quantite</SelectItem>
+                        <SelectItem value="longueur">Longueur</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsUnitDialogOpen(false)}>Annuler</Button>
+                  <Button type="submit" style={{ backgroundColor: settings.primary_color }} data-testid="unit-submit-btn">{editingUnit ? "Mettre a jour" : "Creer"}</Button>
                 </DialogFooter>
               </form>
             </DialogContent>

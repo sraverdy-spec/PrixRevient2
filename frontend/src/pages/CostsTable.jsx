@@ -60,6 +60,8 @@ const CostsTable = () => {
             <thead>
               <tr className="bg-zinc-50">
                 <th className="sticky left-0 bg-zinc-50 z-10">Recette</th>
+                <th>Fournisseur</th>
+                <th className="text-center">Ver.</th>
                 <th className="text-right">Qté</th>
                 <th className="text-right">Matières</th>
                 <th className="text-right">Main d'œuvre</th>
@@ -77,6 +79,8 @@ const CostsTable = () => {
                   <td className="sticky left-0 bg-white z-10 font-medium border-r border-zinc-100">
                     {cost.recipe_name}
                   </td>
+                  <td className="text-sm text-zinc-500">{cost.supplier_name || "-"}</td>
+                  <td className="text-center"><span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-full font-mono">v{cost.version || 1}</span></td>
                   <td className="text-right text-sm text-zinc-500">{cost.output_quantity} {cost.output_unit}</td>
                   <td className="text-right font-mono">{cost.material_cost.toFixed(2)} €</td>
                   <td className="text-right font-mono text-[#10B981]">{cost.labor_cost.toFixed(2)} €</td>
@@ -92,6 +96,8 @@ const CostsTable = () => {
             <tfoot>
               <tr className="bg-zinc-100 font-bold">
                 <td className="sticky left-0 bg-zinc-100 z-10">TOTAUX</td>
+                <td></td>
+                <td></td>
                 <td></td>
                 <td className="text-right font-mono">{costs.reduce((sum, c) => sum + c.material_cost, 0).toFixed(2)} €</td>
                 <td className="text-right font-mono text-[#10B981]">{costs.reduce((sum, c) => sum + c.labor_cost, 0).toFixed(2)} €</td>

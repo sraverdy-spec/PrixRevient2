@@ -200,13 +200,16 @@ class RecipeBase(BaseModel):
     name: str
     description: Optional[str] = None
     category_id: Optional[str] = None
+    supplier_id: Optional[str] = None
+    supplier_name: Optional[str] = None
+    version: int = 1
     output_quantity: float = 1.0
     output_unit: str = "pièce"
     ingredients: List[RecipeIngredient] = []
     labor_costs: List[LaborCost] = []
     overhead_ids: List[str] = []
-    target_margin: float = 30.0  # Target margin percentage
-    is_intermediate: bool = False  # Can be used as sub-recipe
+    target_margin: float = 30.0
+    is_intermediate: bool = False
 
 class RecipeCreate(RecipeBase):
     pass
@@ -215,6 +218,9 @@ class RecipeUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     category_id: Optional[str] = None
+    supplier_id: Optional[str] = None
+    supplier_name: Optional[str] = None
+    version: Optional[int] = None
     output_quantity: Optional[float] = None
     output_unit: Optional[str] = None
     ingredients: Optional[List[RecipeIngredient]] = None
@@ -664,6 +670,29 @@ async def delete_recipe(recipe_id: str):
     await db.recipes.delete_one({"id": recipe_id})
     return {"message": "Recette supprimée"}
 
+@api_router.post("/recipes/{recipe_id}/duplicate")
+async def duplicate_recipe(recipe_id: str):
+    """Duplicate a recipe with incremented version"""
+    original = await db.recipes.find_one({"id": recipe_id}, {"_id": 0})
+    if not original:
+        raise HTTPException(status_code=404, detail="Recette non trouvée")
+    
+    base_name = original["name"]
+    # Find max version for recipes with the same name
+    same_name = await db.recipes.find({"name": base_name}, {"_id": 0, "version": 1}).to_list(100)
+    max_version = max((r.get("version", 1) for r in same_name), default=1)
+    
+    new_recipe = {**original}
+    new_recipe["id"] = str(uuid.uuid4())
+    new_recipe["version"] = max_version + 1
+    new_recipe["created_at"] = datetime.now(timezone.utc).isoformat()
+    new_recipe["updated_at"] = datetime.now(timezone.utc).isoformat()
+    new_recipe.pop("_id", None)
+    
+    await db.recipes.insert_one(new_recipe)
+    result = await db.recipes.find_one({"id": new_recipe["id"]}, {"_id": 0})
+    return result
+
 # ================= COST CALCULATION =================
 
 async def calculate_sub_recipe_cost(recipe_id: str, depth: int = 0) -> dict:
@@ -929,6 +958,8 @@ async def get_all_costs():
                 "recipe_id": recipe['id'],
                 "recipe_name": recipe['name'],
                 "category_id": recipe.get('category_id'),
+                "supplier_name": recipe.get('supplier_name', ''),
+                "version": recipe.get('version', 1),
                 "output_quantity": recipe.get('output_quantity', 1),
                 "output_unit": recipe.get('output_unit', 'pièce'),
                 "material_cost": cost.total_material_cost,
@@ -1484,7 +1515,7 @@ async def export_all_costs_xlsx():
         top=Side(style="thin"), bottom=Side(style="thin")
     )
     
-    headers = ["Recette", "Type", "Qte produite", "Unite", "Cout Matieres", "Cout Main oeuvre",
+    headers = ["Recette", "Version", "Fournisseur", "Type", "Qte produite", "Unite", "Cout Matieres", "Cout Main oeuvre",
                "Cout Frais Gen.", "Cout Freinte", "Cout Total", "Prix/Unite", "Marge %", "Prix Conseille"]
     
     for col, h in enumerate(headers, 1):
@@ -1502,7 +1533,8 @@ async def export_all_costs_xlsx():
             cost = await calculate_cost(recipe["id"])
             rtype = "Semi-fini" if recipe.get("is_intermediate") else "Produit fini"
             values = [
-                recipe["name"], rtype, recipe.get("output_quantity", 1), recipe.get("output_unit", "piece"),
+                recipe["name"], f"v{recipe.get('version', 1)}", recipe.get("supplier_name", ""),
+                rtype, recipe.get("output_quantity", 1), recipe.get("output_unit", "piece"),
                 cost.total_material_cost, cost.total_labor_cost, cost.total_overhead_cost,
                 cost.total_freinte_cost, cost.total_cost, cost.cost_per_unit,
                 cost.target_margin, cost.suggested_price
@@ -1510,8 +1542,8 @@ async def export_all_costs_xlsx():
             for col, val in enumerate(values, 1):
                 cell = ws.cell(row=row_num, column=col, value=val)
                 cell.border = border
-                if col >= 5:
-                    cell.number_format = money_fmt if col != 11 else '0.0"%"'
+                if col >= 7:
+                    cell.number_format = money_fmt if col != 13 else '0.0"%"'
                     cell.alignment = Alignment(horizontal="right")
             
             if recipe.get("is_intermediate"):
@@ -1551,6 +1583,56 @@ async def export_all_costs_xlsx():
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=rapport_couts_{datetime.now().strftime('%Y%m%d')}.xlsx"}
     )
+
+# ================= UNITS MANAGEMENT =================
+
+DEFAULT_UNITS = [
+    {"id": "kg", "name": "Kilogramme", "abbreviation": "kg", "type": "poids"},
+    {"id": "g", "name": "Gramme", "abbreviation": "g", "type": "poids"},
+    {"id": "L", "name": "Litre", "abbreviation": "L", "type": "volume"},
+    {"id": "mL", "name": "Millilitre", "abbreviation": "mL", "type": "volume"},
+    {"id": "piece", "name": "Piece", "abbreviation": "pc", "type": "quantite"},
+    {"id": "unite", "name": "Unite", "abbreviation": "u", "type": "quantite"},
+    {"id": "lot", "name": "Lot", "abbreviation": "lot", "type": "quantite"},
+    {"id": "boite", "name": "Boite", "abbreviation": "bte", "type": "quantite"},
+    {"id": "m", "name": "Metre", "abbreviation": "m", "type": "longueur"},
+    {"id": "cm", "name": "Centimetre", "abbreviation": "cm", "type": "longueur"},
+]
+
+@api_router.get("/units")
+async def get_units():
+    units = await db.units.find({}, {"_id": 0}).to_list(1000)
+    if not units:
+        # Seed default units
+        for u in DEFAULT_UNITS:
+            await db.units.insert_one({**u})
+        units = await db.units.find({}, {"_id": 0}).to_list(1000)
+    return units
+
+@api_router.post("/units")
+async def create_unit(request: Request, admin: dict = Depends(require_admin)):
+    data = await request.json()
+    unit = {
+        "id": str(uuid.uuid4()),
+        "name": data.get("name", ""),
+        "abbreviation": data.get("abbreviation", ""),
+        "type": data.get("type", "quantite"),
+    }
+    await db.units.insert_one(unit)
+    return await db.units.find_one({"id": unit["id"]}, {"_id": 0})
+
+@api_router.put("/units/{unit_id}")
+async def update_unit(unit_id: str, request: Request, admin: dict = Depends(require_admin)):
+    data = await request.json()
+    data.pop("id", None)
+    data.pop("_id", None)
+    await db.units.update_one({"id": unit_id}, {"$set": data})
+    return await db.units.find_one({"id": unit_id}, {"_id": 0})
+
+@api_router.delete("/units/{unit_id}")
+async def delete_unit(unit_id: str, admin: dict = Depends(require_admin)):
+    await db.units.delete_one({"id": unit_id})
+    return {"message": "Unite supprimee"}
 
 # ================= APP SETTINGS =================
 

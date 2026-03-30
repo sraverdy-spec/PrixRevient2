@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { Plus, Eye, Pencil, Trash, CookingPot, Calculator, UploadSimple, DownloadSimple, FileText, TreeStructure } from "@phosphor-icons/react";
+import { Plus, Eye, Pencil, Trash, CookingPot, Calculator, UploadSimple, DownloadSimple, FileText, TreeStructure, Copy, Funnel, MagnifyingGlass } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -22,21 +22,14 @@ import {
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-const OUTPUT_UNITS = [
-  { value: "piece", label: "Piece" },
-  { value: "kg", label: "Kilogramme" },
-  { value: "L", label: "Litre" },
-  { value: "unite", label: "Unite" },
-  { value: "lot", label: "Lot" },
-  { value: "boite", label: "Boite" },
-];
-
 const Recipes = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const { isManager } = useAuth();
   const [recipes, setRecipes] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -44,21 +37,26 @@ const Recipes = () => {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [recipeCosts, setRecipeCosts] = useState({});
+  const [filterSupplier, setFilterSupplier] = useState("all");
+  const [filterVersion, setFilterVersion] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [formData, setFormData] = useState({
     name: "", description: "", output_quantity: "1", output_unit: "piece",
-    target_margin: "30", is_intermediate: false, category_id: "",
+    target_margin: "30", is_intermediate: false, category_id: "", supplier_id: "", supplier_name: "",
   });
 
   useEffect(() => {
-    fetchRecipes();
-    fetchCategories();
+    Promise.all([fetchRecipes(), fetchCategories(), fetchSuppliers(), fetchUnits()]);
   }, []);
 
   const fetchCategories = async () => {
-    try {
-      const response = await axios.get(`${API}/categories`);
-      setCategories(response.data);
-    } catch {}
+    try { setCategories((await axios.get(`${API}/categories`)).data); } catch {}
+  };
+  const fetchSuppliers = async () => {
+    try { setSuppliers((await axios.get(`${API}/suppliers`)).data); } catch {}
+  };
+  const fetchUnits = async () => {
+    try { setUnits((await axios.get(`${API}/units`)).data); } catch {}
   };
 
   const fetchRecipes = async () => {
@@ -75,7 +73,7 @@ const Recipes = () => {
         }
       }
       setRecipeCosts(costs);
-    } catch (error) {
+    } catch {
       toast.error("Erreur lors du chargement des recettes");
     } finally {
       setLoading(false);
@@ -85,6 +83,7 @@ const Recipes = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const supplier = suppliers.find(s => s.id === formData.supplier_id);
       const data = {
         name: formData.name,
         description: formData.description,
@@ -93,12 +92,17 @@ const Recipes = () => {
         target_margin: parseFloat(formData.target_margin) || 30,
         is_intermediate: formData.is_intermediate,
         category_id: formData.category_id || null,
+        supplier_id: formData.supplier_id || null,
+        supplier_name: supplier ? supplier.name : "",
         ingredients: [],
         labor_costs: [],
         overhead_ids: [],
       };
 
       if (selectedRecipe) {
+        data.ingredients = selectedRecipe.ingredients || [];
+        data.labor_costs = selectedRecipe.labor_costs || [];
+        data.overhead_ids = selectedRecipe.overhead_ids || [];
         await axios.put(`${API}/recipes/${selectedRecipe.id}`, data);
         toast.success("Recette mise a jour");
       } else {
@@ -110,7 +114,7 @@ const Recipes = () => {
       setIsDialogOpen(false);
       resetForm();
       fetchRecipes();
-    } catch (error) {
+    } catch {
       toast.error("Erreur lors de l'enregistrement");
     }
   };
@@ -126,6 +130,8 @@ const Recipes = () => {
       target_margin: (recipe.target_margin || 30).toString(),
       is_intermediate: recipe.is_intermediate || false,
       category_id: recipe.category_id || "",
+      supplier_id: recipe.supplier_id || "",
+      supplier_name: recipe.supplier_name || "",
     });
     setIsDialogOpen(true);
   };
@@ -137,14 +143,25 @@ const Recipes = () => {
       setIsDeleteDialogOpen(false);
       setSelectedRecipe(null);
       fetchRecipes();
-    } catch (error) {
+    } catch {
       toast.error("Erreur lors de la suppression");
+    }
+  };
+
+  const handleDuplicate = async (recipe, e) => {
+    e.stopPropagation();
+    try {
+      const res = await axios.post(`${API}/recipes/${recipe.id}/duplicate`);
+      toast.success(`Recette dupliquee (v${res.data.version})`);
+      fetchRecipes();
+    } catch {
+      toast.error("Erreur lors de la duplication");
     }
   };
 
   const resetForm = () => {
     setSelectedRecipe(null);
-    setFormData({ name: "", description: "", output_quantity: "1", output_unit: "piece", target_margin: "30", is_intermediate: false, category_id: "" });
+    setFormData({ name: "", description: "", output_quantity: "1", output_unit: "piece", target_margin: "30", is_intermediate: false, category_id: "", supplier_id: "", supplier_name: "" });
   };
 
   const handleFileUpload = async (event) => {
@@ -154,14 +171,9 @@ const Recipes = () => {
     const fd = new FormData();
     fd.append('file', file);
     try {
-      const response = await axios.post(`${API}/recipes/import-csv`, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const response = await axios.post(`${API}/recipes/import-csv`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       if (response.data.success) {
         toast.success(`${response.data.imported_count} recette(s) importee(s)`);
-        if (response.data.errors?.length > 0) {
-          toast.warning(`${response.data.errors.length} erreur(s)`);
-        }
         fetchRecipes();
       } else {
         toast.error("Aucune recette importee");
@@ -181,13 +193,33 @@ const Recipes = () => {
 
   const getCategoryName = (catId) => categories.find(c => c.id === catId)?.name || "";
 
+  // Filtering
+  const filteredRecipes = recipes.filter(r => {
+    if (filterSupplier !== "all" && (r.supplier_name || "") !== filterSupplier) return false;
+    if (filterVersion !== "all" && (r.version || 1).toString() !== filterVersion) return false;
+    if (searchQuery && !r.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  // Group by supplier
+  const groupedBySupplier = {};
+  filteredRecipes.forEach(r => {
+    const key = r.supplier_name || "Sans fournisseur";
+    if (!groupedBySupplier[key]) groupedBySupplier[key] = [];
+    groupedBySupplier[key].push(r);
+  });
+
+  // Unique values for filters
+  const uniqueSuppliers = [...new Set(recipes.map(r => r.supplier_name || "").filter(Boolean))];
+  const uniqueVersions = [...new Set(recipes.map(r => (r.version || 1).toString()))].sort();
+
   if (loading) {
     return <div className="flex items-center justify-center h-64" data-testid="recipes-loading"><div className="text-zinc-500">Chargement...</div></div>;
   }
 
   return (
     <div className="fade-in" data-testid="recipes-page">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="page-title" data-testid="recipes-title">Recettes de Production</h1>
           <p className="page-subtitle">Definissez vos recettes et calculez les prix de revient</p>
@@ -195,18 +227,55 @@ const Recipes = () => {
         <div className="flex gap-3">
           {isManager && (
             <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} data-testid="import-csv-btn">
-              <UploadSimple size={20} className="mr-2" /> Importer CSV
+              <UploadSimple size={18} className="mr-2" /> Importer CSV
             </Button>
           )}
           {isManager && (
             <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="bg-[#002FA7] hover:bg-[#002482]" data-testid="add-recipe-btn">
-              <Plus size={20} className="mr-2" /> Nouvelle recette
+              <Plus size={18} className="mr-2" /> Nouvelle recette
             </Button>
           )}
         </div>
       </div>
 
-      {recipes.length === 0 ? (
+      {/* Filters */}
+      <div className="bg-white border border-zinc-200 rounded-lg p-4 mb-6 flex flex-wrap items-center gap-4" data-testid="recipe-filters">
+        <div className="flex items-center gap-2">
+          <MagnifyingGlass size={18} className="text-zinc-400" />
+          <Input placeholder="Rechercher..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="h-9 w-48" data-testid="search-input" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Funnel size={16} className="text-zinc-400" />
+          <Select value={filterSupplier} onValueChange={setFilterSupplier}>
+            <SelectTrigger className="h-9 w-48" data-testid="filter-supplier"><SelectValue placeholder="Fournisseur" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous les fournisseurs</SelectItem>
+              {uniqueSuppliers.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <Select value={filterVersion} onValueChange={setFilterVersion}>
+          <SelectTrigger className="h-9 w-32" data-testid="filter-version"><SelectValue placeholder="Version" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes versions</SelectItem>
+            {uniqueVersions.map(v => <SelectItem key={v} value={v}>v{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {(filterSupplier !== "all" || filterVersion !== "all" || searchQuery) && (
+          <Button variant="ghost" size="sm" onClick={() => { setFilterSupplier("all"); setFilterVersion("all"); setSearchQuery(""); }} data-testid="clear-filters">
+            Effacer les filtres
+          </Button>
+        )}
+        <span className="text-sm text-zinc-400 ml-auto">{filteredRecipes.length} recette(s)</span>
+      </div>
+
+      {filteredRecipes.length === 0 && recipes.length > 0 ? (
+        <div className="empty-state bg-white border border-zinc-200 rounded-lg">
+          <Funnel size={48} className="mx-auto mb-4 text-zinc-300" />
+          <p className="empty-state-title">Aucun resultat</p>
+          <p className="empty-state-text">Modifiez vos filtres pour voir des recettes</p>
+        </div>
+      ) : recipes.length === 0 ? (
         <div className="empty-state bg-white border border-zinc-200 rounded-lg" data-testid="no-recipes-message">
           <CookingPot size={64} className="mx-auto mb-4 text-zinc-300" />
           <p className="empty-state-title">Aucune recette</p>
@@ -221,83 +290,82 @@ const Recipes = () => {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="recipes-grid">
-          {recipes.map((recipe, index) => {
-            const cost = recipeCosts[recipe.id];
-            return (
-              <div
-                key={recipe.id}
-                className={`bg-white border rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer ${recipe.is_intermediate ? "border-amber-200 bg-amber-50/30" : "border-zinc-200"}`}
-                onClick={() => navigate(`/recipes/${recipe.id}`)}
-                data-testid={`recipe-card-${index}`}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-zinc-900 text-lg truncate">{recipe.name}</h3>
-                      {recipe.is_intermediate && (
-                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-medium flex items-center gap-1">
-                          <TreeStructure size={10} /> Semi-fini
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-zinc-500 mt-1">
-                      {recipe.output_quantity} {recipe.output_unit}
-                      {getCategoryName(recipe.category_id) && ` \u2022 ${getCategoryName(recipe.category_id)}`}
-                    </p>
-                  </div>
-                  <div className="flex gap-1 shrink-0 ml-2">
-                    {isManager && (
-                      <button onClick={(e) => handleEdit(recipe, e)} className="p-2 hover:bg-zinc-100 rounded-md" data-testid={`edit-recipe-${index}`}>
-                        <Pencil size={16} className="text-zinc-600" />
-                      </button>
-                    )}
-                    {isManager && (
-                      <button onClick={(e) => { e.stopPropagation(); setSelectedRecipe(recipe); setIsDeleteDialogOpen(true); }} className="p-2 hover:bg-red-50 rounded-md" data-testid={`delete-recipe-${index}`}>
-                        <Trash size={16} className="text-red-500" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {recipe.description && (
-                  <p className="text-sm text-zinc-600 mb-3 line-clamp-2">{recipe.description}</p>
-                )}
-
-                <div className="flex items-center gap-4 text-sm text-zinc-500 pt-3 border-t border-zinc-100">
-                  <span>{recipe.ingredients?.length || 0} ingredients</span>
-                  <span>{recipe.labor_costs?.length || 0} main d'oeuvre</span>
-                </div>
-
-                {cost && (
-                  <div className="mt-4 p-3 bg-zinc-50 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-zinc-600">Prix de revient</span>
-                      <div className="flex items-center gap-2">
-                        <Calculator size={16} className="text-[#002FA7]" />
-                        <span className="font-mono font-bold text-[#002FA7] text-lg">{cost.cost_per_unit.toFixed(2)} EUR</span>
-                      </div>
-                    </div>
-                    {cost.suggested_price > 0 && (
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs text-zinc-400">Prix vente conseille (marge {recipe.target_margin || 30}%)</span>
-                        <span className="font-mono text-sm text-[#10B981] font-semibold">{cost.suggested_price.toFixed(2)} EUR</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <Button
-                  variant="outline" className="w-full mt-4"
-                  onClick={(e) => { e.stopPropagation(); navigate(`/recipes/${recipe.id}`); }}
-                  data-testid={`view-recipe-${index}`}
-                >
-                  <Eye size={16} className="mr-2" /> Voir les details
-                </Button>
-              </div>
-            );
-          })}
-        </div>
+        Object.entries(groupedBySupplier).map(([supplierName, supplierRecipes]) => (
+          <div key={supplierName} className="mb-6" data-testid={"supplier-group-" + supplierName.replace(/\s+/g, "-").toLowerCase()}>
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="text-base font-semibold text-zinc-800">{supplierName}</h2>
+              <span className="text-xs px-2 py-0.5 bg-zinc-100 text-zinc-500 rounded-full">{supplierRecipes.length}</span>
+            </div>
+            <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-zinc-50 text-zinc-500 text-xs uppercase tracking-wider">
+                    <th className="text-left py-3 px-4 font-medium">Recette</th>
+                    <th className="text-center py-3 px-2 font-medium w-16">Version</th>
+                    <th className="text-left py-3 px-2 font-medium">Categorie</th>
+                    <th className="text-right py-3 px-2 font-medium">Quantite</th>
+                    <th className="text-right py-3 px-3 font-medium">Prix revient</th>
+                    <th className="text-right py-3 px-3 font-medium">Prix vente</th>
+                    <th className="text-center py-3 px-2 font-medium w-36">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {supplierRecipes.map((recipe, index) => {
+                    const cost = recipeCosts[recipe.id];
+                    return (
+                      <tr key={recipe.id} className="hover:bg-zinc-50 transition-colors" data-testid={"recipe-row-" + index}>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-zinc-900">{recipe.name}</span>
+                            {recipe.is_intermediate && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-medium flex items-center gap-1">
+                                <TreeStructure size={10} /> Semi-fini
+                              </span>
+                            )}
+                          </div>
+                          {recipe.description && <p className="text-xs text-zinc-400 mt-0.5 truncate max-w-xs">{recipe.description}</p>}
+                        </td>
+                        <td className="text-center py-3 px-2">
+                          <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-mono font-medium">v{recipe.version || 1}</span>
+                        </td>
+                        <td className="py-3 px-2 text-zinc-500 text-xs">{getCategoryName(recipe.category_id) || "-"}</td>
+                        <td className="text-right py-3 px-2 text-zinc-600">{recipe.output_quantity} {recipe.output_unit}</td>
+                        <td className="text-right py-3 px-3">
+                          {cost ? <span className="font-mono font-bold text-[#002FA7]">{cost.cost_per_unit.toFixed(2)} EUR</span> : <span className="text-zinc-300">-</span>}
+                        </td>
+                        <td className="text-right py-3 px-3">
+                          {cost?.suggested_price > 0 ? <span className="font-mono font-semibold text-emerald-600">{cost.suggested_price.toFixed(2)} EUR</span> : <span className="text-zinc-300">-</span>}
+                        </td>
+                        <td className="text-center py-3 px-2">
+                          <div className="flex items-center justify-center gap-1">
+                            <button onClick={(e) => { e.stopPropagation(); navigate(`/recipes/${recipe.id}`); }} className="p-1.5 hover:bg-blue-50 rounded-md" title="Detail" data-testid={"view-recipe-" + index}>
+                              <Eye size={16} className="text-blue-600" />
+                            </button>
+                            {isManager && (
+                              <button onClick={(e) => handleDuplicate(recipe, e)} className="p-1.5 hover:bg-violet-50 rounded-md" title="Dupliquer" data-testid={"duplicate-recipe-" + index}>
+                                <Copy size={16} className="text-violet-600" />
+                              </button>
+                            )}
+                            {isManager && (
+                              <button onClick={(e) => handleEdit(recipe, e)} className="p-1.5 hover:bg-zinc-100 rounded-md" title="Modifier" data-testid={"edit-recipe-" + index}>
+                                <Pencil size={16} className="text-zinc-600" />
+                              </button>
+                            )}
+                            {isManager && (
+                              <button onClick={(e) => { e.stopPropagation(); setSelectedRecipe(recipe); setIsDeleteDialogOpen(true); }} className="p-1.5 hover:bg-red-50 rounded-md" title="Supprimer" data-testid={"delete-recipe-" + index}>
+                                <Trash size={16} className="text-red-500" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))
       )}
 
       {/* Add/Edit Dialog */}
@@ -309,7 +377,7 @@ const Recipes = () => {
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
               <div className="space-y-2">
                 <Label htmlFor="name">Nom de la recette *</Label>
                 <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Ex: Pain de campagne" required data-testid="recipe-name-input" />
@@ -317,6 +385,16 @@ const Recipes = () => {
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Description de la recette..." rows={2} data-testid="recipe-description-input" />
+              </div>
+              <div className="space-y-2">
+                <Label>Fournisseur</Label>
+                <Select value={formData.supplier_id || "none"} onValueChange={(v) => setFormData({ ...formData, supplier_id: v === "none" ? "" : v })}>
+                  <SelectTrigger data-testid="recipe-supplier-select"><SelectValue placeholder="Aucun" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucun</SelectItem>
+                    {suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
@@ -328,7 +406,16 @@ const Recipes = () => {
                   <Select value={formData.output_unit} onValueChange={(v) => setFormData({ ...formData, output_unit: v })}>
                     <SelectTrigger data-testid="recipe-unit-select"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {OUTPUT_UNITS.map((u) => <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>)}
+                      {units.length > 0 ? units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name} ({u.abbreviation})</SelectItem>) : (
+                        <>
+                          <SelectItem value="piece">Piece</SelectItem>
+                          <SelectItem value="kg">Kilogramme</SelectItem>
+                          <SelectItem value="L">Litre</SelectItem>
+                          <SelectItem value="unite">Unite</SelectItem>
+                          <SelectItem value="lot">Lot</SelectItem>
+                          <SelectItem value="boite">Boite</SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -358,7 +445,7 @@ const Recipes = () => {
                 />
                 <label htmlFor="is_intermediate" className="cursor-pointer">
                   <p className="font-medium text-amber-900 text-sm">Article semi-fini</p>
-                  <p className="text-xs text-amber-700">Cette recette peut etre utilisee comme composant dans d'autres recettes (arbre de fabrication)</p>
+                  <p className="text-xs text-amber-700">Cette recette peut etre utilisee comme composant dans d'autres recettes</p>
                 </label>
               </div>
             </div>
