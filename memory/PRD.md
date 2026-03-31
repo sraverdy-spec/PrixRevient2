@@ -1,13 +1,14 @@
 # PRD - Calculateur de Prix de Revient (PrixRevient)
 
 ## Probleme original
-Application pour calculer le prix de revient d'un produit avec BOM, freinte, main d'oeuvre, frais generaux. Ameliorations: imports CSV/SFTP, RBAC, export Excel, configuration globale, unites, fournisseurs/versions, API KPI publique.
+Application pour calculer le prix de revient d'un produit avec BOM, freinte, main d'oeuvre, frais generaux. Ameliorations progressives: imports CSV/SFTP, RBAC, export Excel, configuration globale, unites, fournisseurs/versions, API KPI, SSO, simulation, multi-sites.
 
 ## Architecture
 - **Frontend**: React + TailwindCSS + Shadcn UI + Recharts + Phosphor Icons
-- **Backend**: FastAPI (Python) + PyMongo + openpyxl
+- **Backend**: FastAPI (Python) + PyMongo + openpyxl + httpx (OAuth)
 - **Database**: MongoDB
-- **Auth**: Session cookies (httpOnly) + RBAC (admin, manager, operator)
+- **Auth**: Session cookies (httpOnly) + RBAC (admin, manager, operator) + SSO OAuth2 (pret)
+- **Deploiement**: VPS Hostinger Ubuntu 22.04 (calculprix.appli-sciad.com)
 
 ## Fonctionnalites implementees
 
@@ -18,50 +19,55 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - RBAC: 3 roles, protection API, sidebar filtre
 
 ### Phase 5 - Configuration globale (Complete)
-- Parametres 7 onglets: Apparence, Utilisateurs, Import, Taches planifiees, Unites, API, SSO
+- Parametres 8 onglets: Apparence, Utilisateurs, Import, Taches planifiees, Unites, API, Sites, SSO
 - Themes couleurs, logo, sidebar/login dynamiques
 
 ### Phase 6 - Unites, Fournisseurs, Versions (Complete)
-- CRUD Unites de mesure (10 par defaut)
-- Fournisseur + version sur recettes
-- Duplication avec version auto-incrementee
+- CRUD Unites, fournisseur+version sur recettes, duplication auto
 - Page Recettes en tableau groupe par fournisseur + filtres
-- Comparaison avec version/fournisseur dans les libelles
 
-### Phase 7 - Import CSV etendu + API KPI (Complete - 31 Mars 2026)
-- [x] Import CSV fournisseurs (POST /api/suppliers/import-csv)
-- [x] Import CSV categories (POST /api/categories/import-csv)
-- [x] Templates CSV telechargeables pour fournisseurs et categories
-- [x] Types fournisseurs/categories dans import auto + centre import
-- [x] API KPI publique avec 5 endpoints securises par cle API
-- [x] Documentation API integree (GET /api/public/kpi/doc)
-- [x] Gestion des cles API dans Parametres (creer/revoquer/activer/desactiver)
-- [x] Authentification par X-API-Key header ou ?api_key= query param
+### Phase 7 - Import CSV etendu + API KPI (Complete)
+- Import CSV fournisseurs + categories
+- API KPI publique (5 endpoints) avec gestion cles API
+
+### Phase 8 - SSO + Simulation + Multi-sites (Complete - 31 Mars 2026)
+- [x] SSO Google OAuth2 (module pret, activation via Parametres > SSO)
+- [x] SSO Microsoft Azure AD (module pret, activation via Parametres > SSO)
+- [x] Boutons SSO conditionnels sur la page login
+- [x] Endpoint /api/auth/sso/status pour detecter SSO disponible
+- [x] Historique des prix (enregistrement recettes + matieres)
+- [x] Alertes prix fournisseurs (seuil configurable)
+- [x] Simulation What-If : impact variation prix matiere sur recettes
+- [x] Page Simulation avec selecteur matiere, presets %, tableau impacts
+- [x] Gestion multi-sites (CRUD sites, site par defaut auto-seed)
 
 ## Credentials
 - Admin: admin@example.com / Admin123!
 - Manager: manager@example.com / Manager123!
 - Operateur: operator@example.com / Operator123!
 
-## API KPI publique
-- GET /api/public/kpi/doc → Documentation (public)
-- GET /api/public/kpi/summary → Resume KPI global
-- GET /api/public/kpi/costs → Couts detailles (?supplier=, ?version=)
-- GET /api/public/kpi/materials → Matieres premieres
-- GET /api/public/kpi/recipes → Recettes
-- GET /api/public/kpi/suppliers → Fournisseurs
-Auth: Header X-API-Key ou param ?api_key=
+## Routes frontend
+- / : Dashboard
+- /materials : Matieres premieres
+- /recipes : Recettes (tableau par fournisseur)
+- /recipes/:id : Detail recette
+- /overheads : Frais generaux
+- /suppliers : Fournisseurs
+- /categories : Categories
+- /costs-table : Tableau des couts + Export Excel
+- /comparison : Comparaison
+- /bom : Arbre de fabrication
+- /simulation : Simulation what-if
+- /settings : Parametres (admin only, 8 onglets)
 
 ## Deploiement
 - Domaine: calculprix.appli-sciad.com
-- VPS: Hostinger Ubuntu 22.04
-- Node 20 LTS requis
-- install.sh automatise tout (Node, MongoDB, Python, Nginx, SSL)
+- ZIP: https://cost-calculator-113.preview.emergentagent.com/prixrevient-deploy.zip
+- Mise a jour: wget ZIP + unzip -o + pip install -r + yarn build + systemctl restart
 
 ## Backlog
-- P1: SSO Google + Microsoft (bouton activation)
-- P2: Module simulation de marges (what-if)
-- P2: Alertes prix fournisseurs
-- P2: Historique des couts et tendances
-- P3: Export automatique planifie par email
-- P3: Mode multi-entreprise
+- P2 : Historique des couts - graphique evolution temporelle sur Dashboard
+- P2 : Alertes prix - notifications visuelles sur le Dashboard
+- P2 : Champ site_id sur recettes et matieres avec filtre par site
+- P3 : Export automatique planifie par email
+- P3 : Application mobile (PWA)
