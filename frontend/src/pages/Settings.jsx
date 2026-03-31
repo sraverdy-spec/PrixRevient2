@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Gear, Palette, Image, Users, CloudArrowUp, Timer, Plugs, UploadSimple, Trash, Play, Plus, FloppyDisk, Ruler, Pencil } from "@phosphor-icons/react";
+import { Gear, Palette, Image, Users, CloudArrowUp, Timer, Plugs, UploadSimple, Trash, Play, Plus, FloppyDisk, Ruler, Pencil, Key, Copy, Eye, EyeSlash } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -54,9 +54,13 @@ export default function Settings() {
   const [isUnitDialogOpen, setIsUnitDialogOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState(null);
   const [unitForm, setUnitForm] = useState({ name: "", abbreviation: "", type: "quantite" });
+  const [apiKeys, setApiKeys] = useState([]);
+  const [apiKeyName, setApiKeyName] = useState("");
+  const [apiDoc, setApiDoc] = useState(null);
+  const [showKey, setShowKey] = useState({});
 
   useEffect(() => {
-    Promise.all([fetchSettings(), fetchCrontabs(), fetchUnits()]).finally(() => setLoading(false));
+    Promise.all([fetchSettings(), fetchCrontabs(), fetchUnits(), fetchApiKeys(), fetchApiDoc()]).finally(() => setLoading(false));
   }, []);
 
   const fetchSettings = async () => {
@@ -93,6 +97,45 @@ export default function Settings() {
       toast.success("Unite supprimee");
       fetchUnits();
     } catch { toast.error("Erreur"); }
+  };
+
+  const fetchApiKeys = async () => {
+    try { setApiKeys((await axios.get(API + "/api-keys")).data); } catch {}
+  };
+
+  const fetchApiDoc = async () => {
+    try { setApiDoc((await axios.get(API + "/public/kpi/doc")).data); } catch {}
+  };
+
+  const handleCreateApiKey = async () => {
+    if (!apiKeyName.trim()) return toast.error("Nom requis");
+    try {
+      await axios.post(API + "/api-keys", { name: apiKeyName });
+      toast.success("Cle API creee");
+      setApiKeyName("");
+      fetchApiKeys();
+    } catch { toast.error("Erreur"); }
+  };
+
+  const handleDeleteApiKey = async (id) => {
+    try {
+      await axios.delete(API + "/api-keys/" + id);
+      toast.success("Cle supprimee");
+      fetchApiKeys();
+    } catch { toast.error("Erreur"); }
+  };
+
+  const handleToggleApiKey = async (id) => {
+    try {
+      await axios.put(API + "/api-keys/" + id + "/toggle");
+      toast.success("Statut mis a jour");
+      fetchApiKeys();
+    } catch { toast.error("Erreur"); }
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Copie dans le presse-papier");
   };
 
   const handleSaveSettings = async () => {
@@ -191,6 +234,7 @@ export default function Settings() {
           <TabsTrigger value="import" data-testid="tab-import"><CloudArrowUp size={16} className="mr-2" /> Import</TabsTrigger>
           <TabsTrigger value="crontabs" data-testid="tab-crontabs"><Timer size={16} className="mr-2" /> Taches planifiees</TabsTrigger>
           <TabsTrigger value="units" data-testid="tab-units"><Ruler size={16} className="mr-2" /> Unites</TabsTrigger>
+          <TabsTrigger value="api" data-testid="tab-api"><Key size={16} className="mr-2" /> API</TabsTrigger>
           <TabsTrigger value="sso" data-testid="tab-sso"><Plugs size={16} className="mr-2" /> SSO</TabsTrigger>
         </TabsList>
 
@@ -446,6 +490,108 @@ export default function Settings() {
               </form>
             </DialogContent>
           </Dialog>
+        </TabsContent>
+
+        {/* ===== API KEYS TAB ===== */}
+        <TabsContent value="api">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gestion des cles */}
+            <div className="bg-white border border-zinc-200 rounded-lg p-6">
+              <h3 className="font-semibold text-zinc-900 flex items-center gap-2 mb-4"><Key size={20} /> Cles API</h3>
+              <p className="text-sm text-zinc-500 mb-4">Generez des cles pour connecter des outils externes (Power BI, Grafana, Excel...)</p>
+
+              <div className="flex gap-2 mb-4">
+                <Input value={apiKeyName} onChange={e => setApiKeyName(e.target.value)} placeholder="Nom de la cle (ex: Power BI)" className="flex-1" data-testid="api-key-name-input" />
+                <Button onClick={handleCreateApiKey} style={{ backgroundColor: settings.primary_color }} data-testid="create-api-key-btn">
+                  <Plus size={16} className="mr-1" /> Creer
+                </Button>
+              </div>
+
+              {apiKeys.length === 0 ? (
+                <p className="text-center text-zinc-400 py-6 text-sm">Aucune cle API</p>
+              ) : (
+                <div className="space-y-2">
+                  {apiKeys.map(k => (
+                    <div key={k.id} className="p-3 border border-zinc-200 rounded-lg" data-testid={"api-key-" + k.id}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-sm">{k.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${k.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                            {k.is_active ? "Active" : "Inactive"}
+                          </span>
+                          <button onClick={() => handleToggleApiKey(k.id)} className="p-1 hover:bg-zinc-100 rounded" title={k.is_active ? "Desactiver" : "Activer"}>
+                            {k.is_active ? <EyeSlash size={14} /> : <Eye size={14} />}
+                          </button>
+                          <button onClick={() => handleDeleteApiKey(k.id)} className="p-1 hover:bg-red-50 rounded"><Trash size={14} className="text-red-500" /></button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-zinc-50 px-2 py-1 rounded flex-1 font-mono truncate">
+                          {showKey[k.id] ? k.key : k.key.substring(0, 8) + "••••••••••••••"}
+                        </code>
+                        <button onClick={() => setShowKey(prev => ({ ...prev, [k.id]: !prev[k.id] }))} className="p-1 hover:bg-zinc-100 rounded">
+                          {showKey[k.id] ? <EyeSlash size={14} /> : <Eye size={14} />}
+                        </button>
+                        <button onClick={() => copyToClipboard(k.key)} className="p-1 hover:bg-zinc-100 rounded" data-testid={"copy-key-" + k.id}>
+                          <Copy size={14} />
+                        </button>
+                      </div>
+                      {k.last_used && <p className="text-[10px] text-zinc-400 mt-1">Derniere utilisation: {new Date(k.last_used).toLocaleString("fr-FR")}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Documentation API */}
+            <div className="bg-white border border-zinc-200 rounded-lg p-6">
+              <h3 className="font-semibold text-zinc-900 mb-4">Documentation API KPI</h3>
+              {apiDoc ? (
+                <div className="space-y-3">
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800 font-medium">Authentification</p>
+                    <p className="text-xs text-blue-700 mt-1">Header: <code className="bg-blue-100 px-1 rounded">X-API-Key: VOTRE_CLE</code></p>
+                    <p className="text-xs text-blue-700">Ou param: <code className="bg-blue-100 px-1 rounded">?api_key=VOTRE_CLE</code></p>
+                  </div>
+                  {apiDoc.endpoints?.map((ep, i) => (
+                    <div key={i} className="p-3 bg-zinc-50 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-mono font-bold">{ep.method}</span>
+                        <code className="text-xs font-mono font-medium text-zinc-800">{ep.url}</code>
+                      </div>
+                      <p className="text-xs text-zinc-500 mb-2">{ep.description}</p>
+                      {ep.champs_reponse && (
+                        <details className="text-xs">
+                          <summary className="cursor-pointer text-zinc-400 hover:text-zinc-600">Champs de reponse</summary>
+                          <div className="mt-1 space-y-0.5 pl-2 border-l-2 border-zinc-200">
+                            {Object.entries(ep.champs_reponse).map(([field, desc]) => (
+                              <div key={field}><code className="text-blue-600">{field}</code> : <span className="text-zinc-500">{desc}</span></div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                      {ep.parametres && (
+                        <details className="text-xs mt-1">
+                          <summary className="cursor-pointer text-zinc-400 hover:text-zinc-600">Parametres</summary>
+                          <div className="mt-1 space-y-0.5 pl-2 border-l-2 border-zinc-200">
+                            {Object.entries(ep.parametres).map(([field, desc]) => (
+                              <div key={field}><code className="text-amber-600">{field}</code> : <span className="text-zinc-500">{desc}</span></div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  ))}
+                  <div className="p-3 bg-zinc-800 rounded-lg">
+                    <p className="text-xs text-zinc-400 mb-1">Exemple curl :</p>
+                    <code className="text-xs text-green-400 break-all">{apiDoc.exemple_curl}</code>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-zinc-400">Documentation non disponible</p>
+              )}
+            </div>
+          </div>
         </TabsContent>
 
         {/* ===== SSO TAB ===== */}

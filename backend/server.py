@@ -460,6 +460,91 @@ async def delete_supplier(supplier_id: str):
     await db.suppliers.delete_one({"id": supplier_id})
     return {"message": "Fournisseur supprimé"}
 
+@api_router.post("/suppliers/import-csv")
+async def import_suppliers_csv(file: UploadFile = File(...)):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Le fichier doit être au format CSV")
+    content = await file.read()
+    decoded = content.decode('utf-8-sig')
+    reader = csv.DictReader(StringIO(decoded), delimiter=';')
+    if not reader.fieldnames or len(reader.fieldnames) <= 1:
+        reader = csv.DictReader(StringIO(decoded), delimiter=',')
+    imported_count = 0
+    errors = []
+    for row_num, row in enumerate(reader, start=2):
+        try:
+            row = {k.strip().lower().replace('\ufeff', ''): v.strip() if v else '' for k, v in row.items() if k}
+            name = row.get('name', row.get('nom', '')).strip()
+            if not name:
+                continue
+            supplier = Supplier(
+                name=name,
+                contact=row.get('contact', ''),
+                email=row.get('email', ''),
+                phone=row.get('phone', row.get('telephone', '')),
+                address=row.get('address', row.get('adresse', '')),
+            )
+            doc = supplier.model_dump()
+            doc['created_at'] = doc['created_at'].isoformat()
+            await db.suppliers.insert_one(doc)
+            imported_count += 1
+        except Exception as e:
+            errors.append(f"Ligne {row_num}: {str(e)}")
+    return {"success": imported_count > 0, "imported_count": imported_count, "errors": errors}
+
+@api_router.get("/suppliers/csv-template")
+async def get_suppliers_csv_template():
+    template = """name;contact;email;phone;address
+Moulin du Lac;Jean Dupont;contact@moulin.fr;0145678900;12 rue du Moulin 75001 Paris
+Laiterie Centrale;Marie Martin;info@laiterie.fr;0234567890;5 avenue du Lait 69001 Lyon
+"""
+    return StreamingResponse(
+        BytesIO(template.encode('utf-8-sig')),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=template_fournisseurs.csv"}
+    )
+
+@api_router.post("/categories/import-csv")
+async def import_categories_csv(file: UploadFile = File(...)):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Le fichier doit être au format CSV")
+    content = await file.read()
+    decoded = content.decode('utf-8-sig')
+    reader = csv.DictReader(StringIO(decoded), delimiter=';')
+    if not reader.fieldnames or len(reader.fieldnames) <= 1:
+        reader = csv.DictReader(StringIO(decoded), delimiter=',')
+    imported_count = 0
+    errors = []
+    for row_num, row in enumerate(reader, start=2):
+        try:
+            row = {k.strip().lower().replace('\ufeff', ''): v.strip() if v else '' for k, v in row.items() if k}
+            name = row.get('name', row.get('nom', '')).strip()
+            if not name:
+                continue
+            color = row.get('color', row.get('couleur', '#002FA7')).strip() or '#002FA7'
+            description = row.get('description', '').strip()
+            category = Category(name=name, description=description, color=color)
+            doc = category.model_dump()
+            doc['created_at'] = doc['created_at'].isoformat()
+            await db.categories.insert_one(doc)
+            imported_count += 1
+        except Exception as e:
+            errors.append(f"Ligne {row_num}: {str(e)}")
+    return {"success": imported_count > 0, "imported_count": imported_count, "errors": errors}
+
+@api_router.get("/categories/csv-template")
+async def get_categories_csv_template():
+    template = """name;description;color
+Boulangerie;Produits de boulangerie;#002FA7
+Patisserie;Gateaux et desserts;#E91E63
+Viennoiserie;Croissants et pains au chocolat;#FF9800
+"""
+    return StreamingResponse(
+        BytesIO(template.encode('utf-8-sig')),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=template_categories.csv"}
+    )
+
 # ================= RAW MATERIALS ENDPOINTS =================
 
 @api_router.get("/materials")
@@ -1263,8 +1348,12 @@ async def auto_import(file: UploadFile = File(...), import_type: str = "material
         result = await import_bom_csv(file)
     elif import_type == "recipes":
         result = await import_recipes_csv(file)
+    elif import_type == "suppliers":
+        result = await import_suppliers_csv(file)
+    elif import_type == "categories":
+        result = await import_categories_csv(file)
     else:
-        raise HTTPException(status_code=400, detail="Type d'import invalide. Utilisez 'materials', 'recipes' ou 'bom'")
+        raise HTTPException(status_code=400, detail="Type d'import invalide. Utilisez 'materials', 'recipes', 'bom', 'suppliers' ou 'categories'")
     
     log_entry["result"] = result
     _append_import_log(log_entry)
@@ -1806,6 +1895,264 @@ async def get_dashboard_stats():
 async def root():
     return {"message": "API Calculateur de Prix de Revient v2.0"}
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# ================= PUBLIC KPI API =================
+
+async def validate_api_key(request: Request):
+    """Validate API key from header or query param"""
+    api_key = request.headers.get("X-API-Key") or request.query_params.get("api_key")
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Cle API requise (header X-API-Key ou param ?api_key=)")
+    key_doc = await db.api_keys.find_one({"key": api_key, "is_active": True}, {"_id": 0})
+    if not key_doc:
+        raise HTTPException(status_code=403, detail="Cle API invalide ou desactivee")
+    await db.api_keys.update_one({"key": api_key}, {"$set": {"last_used": datetime.now(timezone.utc).isoformat()}})
+    return key_doc
+
+@api_router.get("/public/kpi/doc")
+async def kpi_documentation():
+    """Documentation complète de l'API KPI publique"""
+    return {
+        "title": "PrixRevient - API KPI Publique",
+        "version": "1.0",
+        "authentication": {
+            "method": "Cle API",
+            "header": "X-API-Key: VOTRE_CLE",
+            "query_param": "?api_key=VOTRE_CLE",
+            "gestion": "Parametres > API dans l'interface admin"
+        },
+        "endpoints": [
+            {
+                "url": "/api/public/kpi/summary",
+                "method": "GET",
+                "description": "Resume global des KPI",
+                "champs_reponse": {
+                    "total_recipes": "Nombre total de recettes",
+                    "total_materials": "Nombre total de matieres premieres",
+                    "total_suppliers": "Nombre total de fournisseurs",
+                    "total_categories": "Nombre total de categories",
+                    "avg_cost_per_unit": "Cout moyen par unite (EUR)",
+                    "avg_margin": "Marge moyenne (%)",
+                    "total_production_value": "Valeur totale de production (EUR)",
+                    "top_expensive_recipes": "Top 5 recettes les plus couteuses [{name, cost_per_unit, supplier_name, version}]",
+                    "top_cheapest_recipes": "Top 5 recettes les moins couteuses [{name, cost_per_unit, supplier_name, version}]",
+                    "costs_by_supplier": "Repartition des couts par fournisseur [{supplier, total_cost, recipe_count}]"
+                }
+            },
+            {
+                "url": "/api/public/kpi/costs",
+                "method": "GET",
+                "description": "Detail des couts de toutes les recettes",
+                "parametres": {
+                    "supplier": "(optionnel) Filtrer par nom de fournisseur",
+                    "version": "(optionnel) Filtrer par numero de version"
+                },
+                "champs_reponse": {
+                    "recipe_id": "Identifiant unique de la recette",
+                    "recipe_name": "Nom de la recette",
+                    "supplier_name": "Nom du fournisseur",
+                    "version": "Numero de version",
+                    "output_quantity": "Quantite produite",
+                    "output_unit": "Unite de mesure",
+                    "material_cost": "Cout des matieres (EUR)",
+                    "labor_cost": "Cout main d'oeuvre (EUR)",
+                    "overhead_cost": "Cout frais generaux (EUR)",
+                    "freinte_cost": "Cout de la freinte (EUR)",
+                    "total_cost": "Cout total (EUR)",
+                    "cost_per_unit": "Cout par unite (EUR)",
+                    "target_margin": "Marge cible (%)",
+                    "suggested_price": "Prix de vente conseille (EUR)"
+                }
+            },
+            {
+                "url": "/api/public/kpi/materials",
+                "method": "GET",
+                "description": "Liste des matieres premieres avec prix",
+                "champs_reponse": {
+                    "id": "Identifiant unique",
+                    "name": "Nom de la matiere",
+                    "unit": "Unite de mesure",
+                    "unit_price": "Prix unitaire (EUR)",
+                    "supplier_name": "Nom du fournisseur",
+                    "category_id": "ID de la categorie",
+                    "freinte": "Taux de freinte (%)",
+                    "stock_quantity": "Quantite en stock"
+                }
+            },
+            {
+                "url": "/api/public/kpi/recipes",
+                "method": "GET",
+                "description": "Liste des recettes avec details",
+                "champs_reponse": {
+                    "id": "Identifiant unique",
+                    "name": "Nom de la recette",
+                    "supplier_name": "Nom du fournisseur",
+                    "version": "Numero de version",
+                    "output_quantity": "Quantite produite",
+                    "output_unit": "Unite de mesure",
+                    "target_margin": "Marge cible (%)",
+                    "is_intermediate": "Article semi-fini (true/false)",
+                    "ingredients_count": "Nombre d'ingredients",
+                    "labor_costs_count": "Nombre de postes main d'oeuvre"
+                }
+            },
+            {
+                "url": "/api/public/kpi/suppliers",
+                "method": "GET",
+                "description": "Liste des fournisseurs",
+                "champs_reponse": {
+                    "id": "Identifiant unique",
+                    "name": "Nom du fournisseur",
+                    "contact": "Personne de contact",
+                    "email": "Email",
+                    "phone": "Telephone",
+                    "address": "Adresse"
+                }
+            }
+        ],
+        "exemple_curl": "curl -H 'X-API-Key: VOTRE_CLE' https://calculprix.appli-sciad.com/api/public/kpi/summary"
+    }
+
+@api_router.get("/public/kpi/summary")
+async def kpi_summary(api_key_data: dict = Depends(validate_api_key)):
+    recipes = await db.recipes.find({}, {"_id": 0}).to_list(5000)
+    materials = await db.raw_materials.find({}, {"_id": 0}).to_list(5000)
+    suppliers = await db.suppliers.find({}, {"_id": 0}).to_list(1000)
+    categories = await db.categories.find({}, {"_id": 0}).to_list(1000)
+
+    costs_data = []
+    for recipe in recipes:
+        try:
+            cost = await calculate_cost(recipe["id"])
+            costs_data.append({
+                "name": recipe["name"],
+                "supplier_name": recipe.get("supplier_name", ""),
+                "version": recipe.get("version", 1),
+                "cost_per_unit": cost.cost_per_unit,
+                "total_cost": cost.total_cost,
+                "target_margin": cost.target_margin,
+            })
+        except:
+            continue
+
+    avg_cost = sum(c["cost_per_unit"] for c in costs_data) / len(costs_data) if costs_data else 0
+    avg_margin = sum(c["target_margin"] for c in costs_data) / len(costs_data) if costs_data else 0
+    total_value = sum(c["total_cost"] for c in costs_data)
+
+    sorted_by_cost = sorted(costs_data, key=lambda x: x["cost_per_unit"], reverse=True)
+    by_supplier = {}
+    for c in costs_data:
+        s = c["supplier_name"] or "Sans fournisseur"
+        if s not in by_supplier:
+            by_supplier[s] = {"supplier": s, "total_cost": 0, "recipe_count": 0}
+        by_supplier[s]["total_cost"] += c["total_cost"]
+        by_supplier[s]["recipe_count"] += 1
+
+    return {
+        "total_recipes": len(recipes),
+        "total_materials": len(materials),
+        "total_suppliers": len(suppliers),
+        "total_categories": len(categories),
+        "avg_cost_per_unit": round(avg_cost, 2),
+        "avg_margin": round(avg_margin, 1),
+        "total_production_value": round(total_value, 2),
+        "top_expensive_recipes": sorted_by_cost[:5],
+        "top_cheapest_recipes": sorted_by_cost[-5:][::-1] if len(sorted_by_cost) >= 5 else sorted_by_cost[::-1],
+        "costs_by_supplier": list(by_supplier.values()),
+    }
+
+@api_router.get("/public/kpi/costs")
+async def kpi_costs(supplier: Optional[str] = None, version: Optional[int] = None, api_key_data: dict = Depends(validate_api_key)):
+    query = {}
+    if supplier:
+        query["supplier_name"] = supplier
+    if version:
+        query["version"] = version
+    recipes = await db.recipes.find(query, {"_id": 0}).to_list(5000)
+    results = []
+    for recipe in recipes:
+        try:
+            cost = await calculate_cost(recipe["id"])
+            results.append({
+                "recipe_id": recipe["id"],
+                "recipe_name": recipe["name"],
+                "supplier_name": recipe.get("supplier_name", ""),
+                "version": recipe.get("version", 1),
+                "output_quantity": recipe.get("output_quantity", 1),
+                "output_unit": recipe.get("output_unit", "piece"),
+                "material_cost": round(cost.total_material_cost, 2),
+                "labor_cost": round(cost.total_labor_cost, 2),
+                "overhead_cost": round(cost.total_overhead_cost, 2),
+                "freinte_cost": round(cost.total_freinte_cost, 2),
+                "total_cost": round(cost.total_cost, 2),
+                "cost_per_unit": round(cost.cost_per_unit, 2),
+                "target_margin": cost.target_margin,
+                "suggested_price": round(cost.suggested_price, 2),
+            })
+        except:
+            continue
+    return results
+
+@api_router.get("/public/kpi/materials")
+async def kpi_materials(api_key_data: dict = Depends(validate_api_key)):
+    materials = await db.raw_materials.find({}, {"_id": 0}).to_list(5000)
+    return [{"id": m["id"], "name": m["name"], "unit": m.get("unit",""), "unit_price": m.get("unit_price",0),
+             "supplier_name": m.get("supplier_name",""), "category_id": m.get("category_id",""),
+             "freinte": m.get("freinte",0), "stock_quantity": m.get("stock_quantity",0)} for m in materials]
+
+@api_router.get("/public/kpi/recipes")
+async def kpi_recipes(api_key_data: dict = Depends(validate_api_key)):
+    recipes = await db.recipes.find({}, {"_id": 0}).to_list(5000)
+    return [{"id": r["id"], "name": r["name"], "supplier_name": r.get("supplier_name",""),
+             "version": r.get("version",1), "output_quantity": r.get("output_quantity",1),
+             "output_unit": r.get("output_unit","piece"), "target_margin": r.get("target_margin",30),
+             "is_intermediate": r.get("is_intermediate",False),
+             "ingredients_count": len(r.get("ingredients",[])), "labor_costs_count": len(r.get("labor_costs",[]))} for r in recipes]
+
+@api_router.get("/public/kpi/suppliers")
+async def kpi_suppliers(api_key_data: dict = Depends(validate_api_key)):
+    suppliers = await db.suppliers.find({}, {"_id": 0}).to_list(1000)
+    return [{"id": s["id"], "name": s["name"], "contact": s.get("contact",""),
+             "email": s.get("email",""), "phone": s.get("phone",""), "address": s.get("address","")} for s in suppliers]
+
+# ================= API KEYS MANAGEMENT =================
+
+@api_router.get("/api-keys")
+async def get_api_keys(admin: dict = Depends(require_admin)):
+    keys = await db.api_keys.find({}, {"_id": 0}).to_list(100)
+    return keys
+
+@api_router.post("/api-keys")
+async def create_api_key(request: Request, admin: dict = Depends(require_admin)):
+    data = await request.json()
+    key = {
+        "id": str(uuid.uuid4()),
+        "name": data.get("name", "Cle API"),
+        "key": f"pk_{uuid.uuid4().hex}",
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "last_used": None,
+    }
+    await db.api_keys.insert_one(key)
+    return await db.api_keys.find_one({"id": key["id"]}, {"_id": 0})
+
+@api_router.delete("/api-keys/{key_id}")
+async def delete_api_key(key_id: str, admin: dict = Depends(require_admin)):
+    await db.api_keys.delete_one({"id": key_id})
+    return {"message": "Cle API supprimee"}
+
+@api_router.put("/api-keys/{key_id}/toggle")
+async def toggle_api_key(key_id: str, admin: dict = Depends(require_admin)):
+    key_doc = await db.api_keys.find_one({"id": key_id}, {"_id": 0})
+    if not key_doc:
+        raise HTTPException(status_code=404, detail="Cle non trouvee")
+    new_status = not key_doc.get("is_active", True)
+    await db.api_keys.update_one({"id": key_id}, {"$set": {"is_active": new_status}})
+    return {"is_active": new_status}
+
+# ================= APP SETUP =================
 app.include_router(api_router)
 
 frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
@@ -1816,9 +2163,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def startup_event():

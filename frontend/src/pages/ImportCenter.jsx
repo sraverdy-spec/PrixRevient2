@@ -106,6 +106,8 @@ export default function ImportCenter() {
                       <SelectItem value="materials">Matieres premieres</SelectItem>
                       <SelectItem value="recipes">Recettes simples</SelectItem>
                       <SelectItem value="bom">Arbre de fabrication (BOM)</SelectItem>
+                      <SelectItem value="suppliers">Fournisseurs</SelectItem>
+                      <SelectItem value="categories">Categories</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -200,6 +202,20 @@ export default function ImportCenter() {
                     <div>
                       <p className="font-mono text-sm font-medium">bom_*.csv / arbre_*.csv</p>
                       <p className="text-xs text-zinc-500">Import d'arbre de fabrication avec sous-recettes</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-lg">
+                    <FileText size={18} className="text-purple-500 shrink-0" />
+                    <div>
+                      <p className="font-mono text-sm font-medium">suppliers_*.csv / fournisseurs_*.csv</p>
+                      <p className="text-xs text-zinc-500">Import de fournisseurs</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-lg">
+                    <FileText size={18} className="text-pink-500 shrink-0" />
+                    <div>
+                      <p className="font-mono text-sm font-medium">categories_*.csv</p>
+                      <p className="text-xs text-zinc-500">Import de categories</p>
                     </div>
                   </div>
                 </div>
