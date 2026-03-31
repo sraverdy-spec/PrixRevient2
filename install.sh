@@ -14,7 +14,7 @@ APP_USER="prixrevient"
 MONGO_DB_NAME="cost_calculator"
 BACKEND_PORT=8001
 FRONTEND_PORT=3000
-DOMAIN="prix.appli-sciad.com"  # Nom de domaine de production
+DOMAIN="calculprix.appli-sciad.com"  # Nom de domaine de production
 
 # Couleurs pour les logs
 RED='\033[0;31m'
