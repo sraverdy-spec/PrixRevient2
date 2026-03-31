@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
-import { CurrencyCircleDollar, EnvelopeSimple, Lock } from "@phosphor-icons/react";
+import { CurrencyCircleDollar, EnvelopeSimple, Lock, GoogleLogo, MicrosoftOutlookLogo } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,9 +25,11 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [settings, setSettings] = useState(null);
+  const [ssoStatus, setSsoStatus] = useState({ google_enabled: false, microsoft_enabled: false });
 
   useEffect(() => {
     axios.get(API + "/settings").then(r => setSettings(r.data)).catch(() => {});
+    axios.get(API + "/auth/sso/status").then(r => setSsoStatus(r.data)).catch(() => {});
   }, []);
 
   const primaryColor = settings?.primary_color || "#002FA7";
@@ -48,6 +50,15 @@ const Login = () => {
       toast.error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSSOLogin = async (provider) => {
+    try {
+      const res = await axios.get(`${API}/auth/sso/${provider}/url`);
+      window.location.href = res.data.url;
+    } catch {
+      toast.error(`SSO ${provider} non disponible`);
     }
   };
 
@@ -105,6 +116,27 @@ const Login = () => {
               {loading ? "Connexion..." : "Se connecter"}
             </Button>
           </form>
+
+          {(ssoStatus.google_enabled || ssoStatus.microsoft_enabled) && (
+            <div className="mt-5">
+              <div className="relative mb-4">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-zinc-200" /></div>
+                <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-zinc-400">ou continuer avec</span></div>
+              </div>
+              <div className="space-y-2">
+                {ssoStatus.google_enabled && (
+                  <Button variant="outline" className="w-full" onClick={() => handleSSOLogin("google")} data-testid="sso-google-btn">
+                    <GoogleLogo size={18} weight="bold" className="mr-2 text-red-500" /> Google
+                  </Button>
+                )}
+                {ssoStatus.microsoft_enabled && (
+                  <Button variant="outline" className="w-full" onClick={() => handleSSOLogin("microsoft")} data-testid="sso-microsoft-btn">
+                    <MicrosoftOutlookLogo size={18} weight="bold" className="mr-2 text-blue-500" /> Microsoft
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
 
           <p className="mt-4 text-center text-xs text-zinc-400">
             Contactez l'administrateur pour obtenir un compte

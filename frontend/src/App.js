@@ -15,6 +15,7 @@ import CostsTable from "@/pages/CostsTable";
 import Comparison from "@/pages/Comparison";
 import BOMTree from "@/pages/BOMTree";
 import Settings from "@/pages/Settings";
+import Simulation from "@/pages/Simulation";
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -61,6 +62,7 @@ function AppRoutes() {
         <Route path="costs-table" element={<CostsTable />} />
         <Route path="comparison" element={<Comparison />} />
         <Route path="bom" element={<BOMTree />} />
+        <Route path="simulation" element={<Simulation />} />
         <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>

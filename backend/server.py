@@ -1740,9 +1740,14 @@ DEFAULT_SETTINGS = {
     "company_name": "PrixRevient",
     "logo_data": "",
     "sso_enabled": False,
-    "sso_provider": "",
-    "sso_client_id": "",
-    "sso_domain": "",
+    "sso_google_enabled": False,
+    "sso_google_client_id": "",
+    "sso_google_client_secret": "",
+    "sso_microsoft_enabled": False,
+    "sso_microsoft_client_id": "",
+    "sso_microsoft_client_secret": "",
+    "sso_microsoft_tenant_id": "",
+    "alert_threshold": 10,
 }
 
 @api_router.get("/settings")
@@ -1897,6 +1902,322 @@ async def root():
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# ================= SSO OAUTH2 =================
+
+@api_router.get("/auth/sso/google/url")
+async def google_sso_url():
+    """Get Google OAuth2 authorization URL"""
+    settings = await db.settings.find_one({"key": "app_settings"}, {"_id": 0})
+    if not settings or not settings.get("sso_google_enabled") or not settings.get("sso_google_client_id"):
+        raise HTTPException(status_code=400, detail="SSO Google non configure")
+    client_id = settings["sso_google_client_id"]
+    redirect_uri = os.environ.get("SSO_REDIRECT_URL", "") + "/api/auth/sso/google/callback"
+    scope = "openid email profile"
+    url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope={scope}&access_type=offline"
+    return {"url": url}
+
+@api_router.get("/auth/sso/google/callback")
+async def google_sso_callback(code: str, response: Response):
+    """Handle Google OAuth2 callback"""
+    import httpx
+    settings = await db.settings.find_one({"key": "app_settings"}, {"_id": 0})
+    if not settings or not settings.get("sso_google_enabled"):
+        raise HTTPException(status_code=400, detail="SSO Google non active")
+    
+    client_id = settings["sso_google_client_id"]
+    client_secret = settings.get("sso_google_client_secret", "")
+    redirect_uri = os.environ.get("SSO_REDIRECT_URL", "") + "/api/auth/sso/google/callback"
+    
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post("https://oauth2.googleapis.com/token", data={
+            "code": code, "client_id": client_id, "client_secret": client_secret,
+            "redirect_uri": redirect_uri, "grant_type": "authorization_code"
+        })
+        if token_resp.status_code != 200:
+            raise HTTPException(status_code=400, detail="Erreur d'authentification Google")
+        tokens = token_resp.json()
+        
+        userinfo_resp = await client.get("https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {tokens['access_token']}"})
+        userinfo = userinfo_resp.json()
+    
+    email = userinfo.get("email", "")
+    name = userinfo.get("name", email)
+    
+    user = await db.users.find_one({"email": email})
+    if not user:
+        new_user = {"email": email, "password_hash": "", "name": name, "role": "operator",
+                     "is_active": True, "sso_provider": "google", "created_at": datetime.now(timezone.utc)}
+        await db.users.insert_one(new_user)
+        user = await db.users.find_one({"email": email})
+    
+    token = create_token({"sub": str(user.get("id", user.get("email"))), "email": email, "role": user.get("role", "operator")})
+    response = Response(status_code=302)
+    response.headers["Location"] = "/"
+    response.set_cookie(key="session_token", value=token, httponly=True, secure=True, samesite="lax", max_age=86400)
+    return response
+
+@api_router.get("/auth/sso/microsoft/url")
+async def microsoft_sso_url():
+    """Get Microsoft OAuth2 authorization URL"""
+    settings = await db.settings.find_one({"key": "app_settings"}, {"_id": 0})
+    if not settings or not settings.get("sso_microsoft_enabled") or not settings.get("sso_microsoft_client_id"):
+        raise HTTPException(status_code=400, detail="SSO Microsoft non configure")
+    client_id = settings["sso_microsoft_client_id"]
+    tenant_id = settings.get("sso_microsoft_tenant_id", "common")
+    redirect_uri = os.environ.get("SSO_REDIRECT_URL", "") + "/api/auth/sso/microsoft/callback"
+    scope = "openid email profile User.Read"
+    url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope={scope}"
+    return {"url": url}
+
+@api_router.get("/auth/sso/microsoft/callback")
+async def microsoft_sso_callback(code: str, response: Response):
+    """Handle Microsoft OAuth2 callback"""
+    import httpx
+    settings = await db.settings.find_one({"key": "app_settings"}, {"_id": 0})
+    if not settings or not settings.get("sso_microsoft_enabled"):
+        raise HTTPException(status_code=400, detail="SSO Microsoft non active")
+    
+    client_id = settings["sso_microsoft_client_id"]
+    client_secret = settings.get("sso_microsoft_client_secret", "")
+    tenant_id = settings.get("sso_microsoft_tenant_id", "common")
+    redirect_uri = os.environ.get("SSO_REDIRECT_URL", "") + "/api/auth/sso/microsoft/callback"
+    
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token", data={
+            "code": code, "client_id": client_id, "client_secret": client_secret,
+            "redirect_uri": redirect_uri, "grant_type": "authorization_code", "scope": "openid email profile User.Read"
+        })
+        if token_resp.status_code != 200:
+            raise HTTPException(status_code=400, detail="Erreur d'authentification Microsoft")
+        tokens = token_resp.json()
+        
+        userinfo_resp = await client.get("https://graph.microsoft.com/v1.0/me",
+            headers={"Authorization": f"Bearer {tokens['access_token']}"})
+        userinfo = userinfo_resp.json()
+    
+    email = userinfo.get("mail", userinfo.get("userPrincipalName", ""))
+    name = userinfo.get("displayName", email)
+    
+    user = await db.users.find_one({"email": email})
+    if not user:
+        new_user = {"email": email, "password_hash": "", "name": name, "role": "operator",
+                     "is_active": True, "sso_provider": "microsoft", "created_at": datetime.now(timezone.utc)}
+        await db.users.insert_one(new_user)
+        user = await db.users.find_one({"email": email})
+    
+    token = create_token({"sub": str(user.get("id", user.get("email"))), "email": email, "role": user.get("role", "operator")})
+    response = Response(status_code=302)
+    response.headers["Location"] = "/"
+    response.set_cookie(key="session_token", value=token, httponly=True, secure=True, samesite="lax", max_age=86400)
+    return response
+
+@api_router.get("/auth/sso/status")
+async def sso_status():
+    """Get SSO status for login page (public)"""
+    settings = await db.settings.find_one({"key": "app_settings"}, {"_id": 0})
+    if not settings:
+        return {"google_enabled": False, "microsoft_enabled": False}
+    return {
+        "google_enabled": bool(settings.get("sso_google_enabled") and settings.get("sso_google_client_id")),
+        "microsoft_enabled": bool(settings.get("sso_microsoft_enabled") and settings.get("sso_microsoft_client_id")),
+    }
+
+# ================= PRICE HISTORY =================
+
+@api_router.post("/price-history/record")
+async def record_price_history(manager: dict = Depends(require_manager_or_admin)):
+    """Record current prices for all recipes"""
+    recipes = await db.recipes.find({}, {"_id": 0}).to_list(5000)
+    recorded = 0
+    for recipe in recipes:
+        try:
+            cost = await calculate_cost(recipe["id"])
+            entry = {
+                "id": str(uuid.uuid4()),
+                "recipe_id": recipe["id"],
+                "recipe_name": recipe["name"],
+                "supplier_name": recipe.get("supplier_name", ""),
+                "version": recipe.get("version", 1),
+                "cost_per_unit": round(cost.cost_per_unit, 4),
+                "total_cost": round(cost.total_cost, 4),
+                "suggested_price": round(cost.suggested_price, 4),
+                "recorded_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.price_history.insert_one(entry)
+            recorded += 1
+        except:
+            continue
+    return {"recorded": recorded}
+
+@api_router.get("/price-history")
+async def get_price_history(recipe_id: Optional[str] = None, days: int = 90):
+    """Get price history for dashboard charts"""
+    query = {}
+    if recipe_id:
+        query["recipe_id"] = recipe_id
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    query["recorded_at"] = {"$gte": cutoff}
+    entries = await db.price_history.find(query, {"_id": 0}).sort("recorded_at", 1).to_list(10000)
+    return entries
+
+@api_router.get("/price-history/alerts")
+async def get_price_alerts():
+    """Check for price increases above threshold"""
+    settings = await db.settings.find_one({"key": "app_settings"}, {"_id": 0})
+    threshold = (settings or {}).get("alert_threshold", 10)
+    
+    materials = await db.raw_materials.find({}, {"_id": 0}).to_list(5000)
+    alerts = []
+    for mat in materials:
+        history = await db.price_history_materials.find(
+            {"material_id": mat["id"]}, {"_id": 0}
+        ).sort("recorded_at", -1).to_list(2)
+        if len(history) >= 2:
+            old_price = history[1].get("unit_price", 0)
+            new_price = history[0].get("unit_price", 0)
+            if old_price > 0:
+                change_pct = ((new_price - old_price) / old_price) * 100
+                if abs(change_pct) >= threshold:
+                    alerts.append({
+                        "material_name": mat["name"],
+                        "supplier_name": mat.get("supplier_name", ""),
+                        "old_price": old_price,
+                        "new_price": new_price,
+                        "change_pct": round(change_pct, 1),
+                        "type": "hausse" if change_pct > 0 else "baisse",
+                    })
+    return alerts
+
+@api_router.post("/price-history/materials/record")
+async def record_material_prices(manager: dict = Depends(require_manager_or_admin)):
+    """Record current material prices for tracking"""
+    materials = await db.raw_materials.find({}, {"_id": 0}).to_list(5000)
+    recorded = 0
+    for mat in materials:
+        entry = {
+            "id": str(uuid.uuid4()),
+            "material_id": mat["id"],
+            "material_name": mat["name"],
+            "unit_price": mat.get("unit_price", 0),
+            "supplier_name": mat.get("supplier_name", ""),
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.price_history_materials.insert_one(entry)
+        recorded += 1
+    return {"recorded": recorded}
+
+# ================= SIMULATION (WHAT-IF) =================
+
+@api_router.post("/simulation/what-if")
+async def simulation_what_if(request: Request):
+    """Simulate impact of price change on recipes"""
+    data = await request.json()
+    material_id = data.get("material_id")
+    price_change_pct = data.get("price_change_pct", 0)
+    
+    if not material_id:
+        raise HTTPException(status_code=400, detail="material_id requis")
+    
+    material = await db.raw_materials.find_one({"id": material_id}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Matiere non trouvee")
+    
+    original_price = material.get("unit_price", 0)
+    new_price = original_price * (1 + price_change_pct / 100)
+    
+    recipes = await db.recipes.find({}, {"_id": 0}).to_list(5000)
+    impacts = []
+    
+    for recipe in recipes:
+        ingredients = recipe.get("ingredients", [])
+        uses_material = any(i.get("material_id") == material_id for i in ingredients)
+        if not uses_material:
+            continue
+        
+        try:
+            current_cost = await calculate_cost(recipe["id"])
+            
+            # Temporarily change price in memory to calculate new cost
+            mat_qty = 0
+            for ing in ingredients:
+                if ing.get("material_id") == material_id:
+                    mat_qty += ing.get("quantity", 0)
+            
+            price_diff_per_unit = (new_price - original_price) * mat_qty
+            freinte = material.get("freinte", 0)
+            if freinte > 0:
+                price_diff_per_unit = price_diff_per_unit / (1 - freinte / 100)
+            
+            new_total_cost = current_cost.total_cost + price_diff_per_unit
+            output_qty = recipe.get("output_quantity", 1)
+            new_cost_per_unit = new_total_cost / output_qty if output_qty > 0 else 0
+            margin = recipe.get("target_margin", 30)
+            new_suggested_price = new_cost_per_unit / (1 - margin / 100) if margin < 100 else 0
+            
+            impacts.append({
+                "recipe_id": recipe["id"],
+                "recipe_name": recipe["name"],
+                "supplier_name": recipe.get("supplier_name", ""),
+                "version": recipe.get("version", 1),
+                "current_cost_per_unit": round(current_cost.cost_per_unit, 2),
+                "new_cost_per_unit": round(new_cost_per_unit, 2),
+                "cost_diff": round(new_cost_per_unit - current_cost.cost_per_unit, 2),
+                "cost_diff_pct": round(((new_cost_per_unit - current_cost.cost_per_unit) / current_cost.cost_per_unit * 100) if current_cost.cost_per_unit > 0 else 0, 1),
+                "current_suggested_price": round(current_cost.suggested_price, 2),
+                "new_suggested_price": round(new_suggested_price, 2),
+            })
+        except:
+            continue
+    
+    return {
+        "material_name": material["name"],
+        "original_price": original_price,
+        "new_price": round(new_price, 4),
+        "price_change_pct": price_change_pct,
+        "impacted_recipes": len(impacts),
+        "impacts": impacts,
+    }
+
+# ================= SITES MANAGEMENT =================
+
+@api_router.get("/sites")
+async def get_sites():
+    sites = await db.sites.find({}, {"_id": 0}).to_list(100)
+    if not sites:
+        default_site = {"id": "default", "name": "Site principal", "address": "", "is_default": True}
+        await db.sites.insert_one({**default_site})
+        return [default_site]
+    return sites
+
+@api_router.post("/sites")
+async def create_site(request: Request, admin: dict = Depends(require_admin)):
+    data = await request.json()
+    site = {
+        "id": str(uuid.uuid4()),
+        "name": data.get("name", ""),
+        "address": data.get("address", ""),
+        "is_default": False,
+    }
+    await db.sites.insert_one(site)
+    return await db.sites.find_one({"id": site["id"]}, {"_id": 0})
+
+@api_router.put("/sites/{site_id}")
+async def update_site(site_id: str, request: Request, admin: dict = Depends(require_admin)):
+    data = await request.json()
+    data.pop("id", None)
+    data.pop("_id", None)
+    await db.sites.update_one({"id": site_id}, {"$set": data})
+    return await db.sites.find_one({"id": site_id}, {"_id": 0})
+
+@api_router.delete("/sites/{site_id}")
+async def delete_site(site_id: str, admin: dict = Depends(require_admin)):
+    site = await db.sites.find_one({"id": site_id}, {"_id": 0})
+    if site and site.get("is_default"):
+        raise HTTPException(status_code=400, detail="Impossible de supprimer le site par defaut")
+    await db.sites.delete_one({"id": site_id})
+    return {"message": "Site supprime"}
 
 # ================= PUBLIC KPI API =================
 

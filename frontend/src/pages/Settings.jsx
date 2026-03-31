@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Gear, Palette, Image, Users, CloudArrowUp, Timer, Plugs, UploadSimple, Trash, Play, Plus, FloppyDisk, Ruler, Pencil, Key, Copy, Eye, EyeSlash } from "@phosphor-icons/react";
+import { Gear, Palette, Image, Users, CloudArrowUp, Timer, Plugs, UploadSimple, Trash, Play, Plus, FloppyDisk, Ruler, Pencil, Key, Copy, Eye, EyeSlash, Buildings } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -58,9 +58,13 @@ export default function Settings() {
   const [apiKeyName, setApiKeyName] = useState("");
   const [apiDoc, setApiDoc] = useState(null);
   const [showKey, setShowKey] = useState({});
+  const [sites, setSites] = useState([]);
+  const [isSiteDialogOpen, setIsSiteDialogOpen] = useState(false);
+  const [editingSite, setEditingSite] = useState(null);
+  const [siteForm, setSiteForm] = useState({ name: "", address: "" });
 
   useEffect(() => {
-    Promise.all([fetchSettings(), fetchCrontabs(), fetchUnits(), fetchApiKeys(), fetchApiDoc()]).finally(() => setLoading(false));
+    Promise.all([fetchSettings(), fetchCrontabs(), fetchUnits(), fetchApiKeys(), fetchApiDoc(), fetchSites()]).finally(() => setLoading(false));
   }, []);
 
   const fetchSettings = async () => {
@@ -136,6 +140,35 @@ export default function Settings() {
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     toast.success("Copie dans le presse-papier");
+  };
+
+  const fetchSites = async () => {
+    try { setSites((await axios.get(API + "/sites")).data); } catch {}
+  };
+
+  const handleSaveSite = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingSite) {
+        await axios.put(API + "/sites/" + editingSite.id, siteForm);
+        toast.success("Site mis a jour");
+      } else {
+        await axios.post(API + "/sites", siteForm);
+        toast.success("Site cree");
+      }
+      setIsSiteDialogOpen(false);
+      setEditingSite(null);
+      setSiteForm({ name: "", address: "" });
+      fetchSites();
+    } catch { toast.error("Erreur"); }
+  };
+
+  const handleDeleteSite = async (id) => {
+    try {
+      await axios.delete(API + "/sites/" + id);
+      toast.success("Site supprime");
+      fetchSites();
+    } catch (err) { toast.error(err.response?.data?.detail || "Erreur"); }
   };
 
   const handleSaveSettings = async () => {
@@ -235,6 +268,7 @@ export default function Settings() {
           <TabsTrigger value="crontabs" data-testid="tab-crontabs"><Timer size={16} className="mr-2" /> Taches planifiees</TabsTrigger>
           <TabsTrigger value="units" data-testid="tab-units"><Ruler size={16} className="mr-2" /> Unites</TabsTrigger>
           <TabsTrigger value="api" data-testid="tab-api"><Key size={16} className="mr-2" /> API</TabsTrigger>
+          <TabsTrigger value="sites" data-testid="tab-sites"><Buildings size={16} className="mr-2" /> Sites</TabsTrigger>
           <TabsTrigger value="sso" data-testid="tab-sso"><Plugs size={16} className="mr-2" /> SSO</TabsTrigger>
         </TabsList>
 
@@ -594,43 +628,137 @@ export default function Settings() {
           </div>
         </TabsContent>
 
+        {/* ===== SITES TAB ===== */}
+        <TabsContent value="sites">
+          <div className="bg-white border border-zinc-200 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="font-semibold text-zinc-900 flex items-center gap-2"><Buildings size={20} /> Sites de production</h3>
+                <p className="text-sm text-zinc-500 mt-1">Gerez vos differents sites / usines de production</p>
+              </div>
+              <Button onClick={() => { setEditingSite(null); setSiteForm({ name: "", address: "" }); setIsSiteDialogOpen(true); }} style={{ backgroundColor: settings.primary_color }} data-testid="add-site-btn">
+                <Plus size={16} className="mr-2" /> Nouveau site
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {sites.map(site => (
+                <div key={site.id} className="flex items-center justify-between p-4 border border-zinc-200 rounded-lg" data-testid={"site-" + site.id}>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{site.name}</span>
+                      {site.is_default && <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">Par defaut</span>}
+                    </div>
+                    {site.address && <p className="text-xs text-zinc-400 mt-0.5">{site.address}</p>}
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => { setEditingSite(site); setSiteForm({ name: site.name, address: site.address || "" }); setIsSiteDialogOpen(true); }} className="p-1.5 hover:bg-zinc-100 rounded">
+                      <Pencil size={14} className="text-zinc-500" />
+                    </button>
+                    {!site.is_default && (
+                      <button onClick={() => handleDeleteSite(site.id)} className="p-1.5 hover:bg-red-50 rounded">
+                        <Trash size={14} className="text-red-500" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Dialog open={isSiteDialogOpen} onOpenChange={setIsSiteDialogOpen}>
+            <DialogContent className="sm:max-w-[400px]" data-testid="site-dialog">
+              <DialogHeader><DialogTitle>{editingSite ? "Modifier le site" : "Nouveau site"}</DialogTitle></DialogHeader>
+              <form onSubmit={handleSaveSite}>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Nom du site</Label>
+                    <Input value={siteForm.name} onChange={e => setSiteForm({ ...siteForm, name: e.target.value })} placeholder="Ex: Usine Nord" required data-testid="site-name-input" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Adresse</Label>
+                    <Input value={siteForm.address} onChange={e => setSiteForm({ ...siteForm, address: e.target.value })} placeholder="Ex: 12 rue de l'Usine, 59000 Lille" data-testid="site-address-input" />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsSiteDialogOpen(false)}>Annuler</Button>
+                  <Button type="submit" style={{ backgroundColor: settings.primary_color }} data-testid="site-submit-btn">{editingSite ? "Mettre a jour" : "Creer"}</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
         {/* ===== SSO TAB ===== */}
         <TabsContent value="sso">
-          <div className="bg-white border border-zinc-200 rounded-lg p-6">
-            <h3 className="font-semibold text-zinc-900 mb-4 flex items-center gap-2"><Plugs size={20} /> Single Sign-On (SSO)</h3>
-            <div className="flex items-center gap-4 p-4 bg-amber-50 border border-amber-200 rounded-lg mb-6">
-              <Checkbox checked={settings.sso_enabled} onCheckedChange={v => setSettings({ ...settings, sso_enabled: !!v })} data-testid="sso-toggle" />
-              <div>
-                <p className="font-medium text-amber-900">{settings.sso_enabled ? "SSO active" : "SSO desactive"}</p>
-                <p className="text-sm text-amber-700">L activation du SSO necessite une configuration prealable</p>
+          <div className="space-y-6">
+            {/* Google SSO */}
+            <div className="bg-white border border-zinc-200 rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-zinc-900 flex items-center gap-2">
+                  <svg width="20" height="20" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                  Google SSO
+                </h3>
+                <Checkbox checked={settings.sso_google_enabled || false} onCheckedChange={v => setSettings({ ...settings, sso_google_enabled: !!v })} data-testid="sso-google-toggle" />
               </div>
+              {settings.sso_google_enabled && (
+                <div className="space-y-3 pt-2 border-t border-zinc-100">
+                  <div className="space-y-1.5">
+                    <Label>Client ID</Label>
+                    <Input value={settings.sso_google_client_id || ""} onChange={e => setSettings({ ...settings, sso_google_client_id: e.target.value })} placeholder="xxxxx.apps.googleusercontent.com" data-testid="google-client-id" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Client Secret</Label>
+                    <Input type="password" value={settings.sso_google_client_secret || ""} onChange={e => setSettings({ ...settings, sso_google_client_secret: e.target.value })} placeholder="GOCSPX-xxxxx" data-testid="google-client-secret" />
+                  </div>
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                    <p className="font-medium mb-1">Configuration requise sur Google Cloud Console :</p>
+                    <ol className="list-decimal pl-4 space-y-0.5">
+                      <li>Allez sur <b>console.cloud.google.com</b> &gt; APIs &amp; Services &gt; Credentials</li>
+                      <li>Creez un <b>OAuth 2.0 Client ID</b> (type: Web application)</li>
+                      <li>Ajoutez comme URI de redirection : <code className="bg-blue-100 px-1 rounded">https://calculprix.appli-sciad.com/api/auth/sso/google/callback</code></li>
+                    </ol>
+                  </div>
+                </div>
+              )}
             </div>
-            {settings.sso_enabled && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Fournisseur SSO</Label>
-                  <Select value={settings.sso_provider || "none"} onValueChange={v => setSettings({ ...settings, sso_provider: v === "none" ? "" : v })}>
-                    <SelectTrigger data-testid="sso-provider-select"><SelectValue placeholder="Choisir..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Aucun</SelectItem>
-                      <SelectItem value="google">Google Workspace</SelectItem>
-                      <SelectItem value="azure">Microsoft Azure AD</SelectItem>
-                      <SelectItem value="okta">Okta</SelectItem>
-                      <SelectItem value="keycloak">Keycloak</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Client ID</Label>
-                  <Input value={settings.sso_client_id} onChange={e => setSettings({ ...settings, sso_client_id: e.target.value })} placeholder="Votre Client ID SSO" data-testid="sso-client-id" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Domaine</Label>
-                  <Input value={settings.sso_domain} onChange={e => setSettings({ ...settings, sso_domain: e.target.value })} placeholder="auth.votredomaine.fr" data-testid="sso-domain" />
-                </div>
+
+            {/* Microsoft SSO */}
+            <div className="bg-white border border-zinc-200 rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-zinc-900 flex items-center gap-2">
+                  <svg width="20" height="20" viewBox="0 0 23 23"><rect x="1" y="1" width="10" height="10" fill="#f25022"/><rect x="12" y="1" width="10" height="10" fill="#7fba00"/><rect x="1" y="12" width="10" height="10" fill="#00a4ef"/><rect x="12" y="12" width="10" height="10" fill="#ffb900"/></svg>
+                  Microsoft SSO
+                </h3>
+                <Checkbox checked={settings.sso_microsoft_enabled || false} onCheckedChange={v => setSettings({ ...settings, sso_microsoft_enabled: !!v })} data-testid="sso-microsoft-toggle" />
               </div>
-            )}
-            <div className="mt-6 flex justify-end">
+              {settings.sso_microsoft_enabled && (
+                <div className="space-y-3 pt-2 border-t border-zinc-100">
+                  <div className="space-y-1.5">
+                    <Label>Client ID (Application ID)</Label>
+                    <Input value={settings.sso_microsoft_client_id || ""} onChange={e => setSettings({ ...settings, sso_microsoft_client_id: e.target.value })} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" data-testid="microsoft-client-id" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Client Secret</Label>
+                    <Input type="password" value={settings.sso_microsoft_client_secret || ""} onChange={e => setSettings({ ...settings, sso_microsoft_client_secret: e.target.value })} placeholder="xxxxxx~xxxxx" data-testid="microsoft-client-secret" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Tenant ID (laisser vide pour multi-tenant)</Label>
+                    <Input value={settings.sso_microsoft_tenant_id || ""} onChange={e => setSettings({ ...settings, sso_microsoft_tenant_id: e.target.value })} placeholder="common" data-testid="microsoft-tenant-id" />
+                  </div>
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                    <p className="font-medium mb-1">Configuration requise sur Azure Portal :</p>
+                    <ol className="list-decimal pl-4 space-y-0.5">
+                      <li>Allez sur <b>portal.azure.com</b> &gt; Azure AD &gt; App registrations</li>
+                      <li>Creez une application (Web)</li>
+                      <li>Ajoutez comme URI de redirection : <code className="bg-blue-100 px-1 rounded">https://calculprix.appli-sciad.com/api/auth/sso/microsoft/callback</code></li>
+                      <li>Creez un Client Secret dans Certificates &amp; Secrets</li>
+                    </ol>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end">
               <Button onClick={handleSaveSettings} disabled={saving} style={{ backgroundColor: settings.primary_color }} data-testid="save-sso-btn">
                 <FloppyDisk size={18} className="mr-2" /> Sauvegarder
               </Button>
