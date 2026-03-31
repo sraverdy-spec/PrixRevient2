@@ -14,7 +14,7 @@ APP_USER="prixrevient"
 MONGO_DB_NAME="cost_calculator"
 BACKEND_PORT=8001
 FRONTEND_PORT=3000
-DOMAIN=""  # Remplir si vous avez un nom de domaine (ex: prixrevient.mondomaine.fr)
+DOMAIN="prix.appli-sciad.com"  # Nom de domaine de production
 
 # Couleurs pour les logs
 RED='\033[0;31m'
@@ -65,10 +65,33 @@ install_prerequisites() {
 
 # ==================== NODE.JS 20 LTS ====================
 install_nodejs() {
+    REQUIRED_MAJOR=20
+
     if command -v node &> /dev/null; then
         NODE_VER=$(node -v)
-        log_info "Node.js deja installe : $NODE_VER"
-        return
+        NODE_MAJOR=$(echo "$NODE_VER" | sed 's/v//' | cut -d. -f1)
+        if [ "$NODE_MAJOR" -ge 22 ]; then
+            log_warn "Node.js $NODE_VER detecte - version trop recente, incompatible avec ce projet"
+            log_info "Desinstallation et reinstallation de Node.js 20 LTS..."
+            case $OS in
+                ubuntu|debian)
+                    apt-get remove -y nodejs 2>/dev/null
+                    rm -f /etc/apt/sources.list.d/nodesource.list 2>/dev/null
+                    ;;
+                rocky|centos|rhel)
+                    dnf remove -y nodejs 2>/dev/null
+                    ;;
+            esac
+        elif [ "$NODE_MAJOR" -ge 16 ]; then
+            log_ok "Node.js $NODE_VER compatible - pas de reinstallation"
+            # S'assurer que Yarn est installe
+            if ! command -v yarn &> /dev/null; then
+                npm install -g yarn
+            fi
+            return
+        else
+            log_warn "Node.js $NODE_VER trop ancien, mise a jour vers Node 20..."
+        fi
     fi
 
     log_info "Installation de Node.js 20 LTS..."
@@ -352,6 +375,34 @@ NGINX
     fi
 }
 
+# ==================== SSL / LET'S ENCRYPT ====================
+setup_ssl() {
+    if [ -z "$DOMAIN" ]; then
+        log_warn "Pas de domaine configure - SSL ignore"
+        return
+    fi
+
+    log_info "Installation de Certbot pour SSL (Let's Encrypt)..."
+
+    case $OS in
+        ubuntu|debian)
+            apt-get install -y certbot python3-certbot-nginx
+            ;;
+        rocky|centos|rhel)
+            dnf install -y certbot python3-certbot-nginx
+            ;;
+    esac
+
+    log_info "Obtention du certificat SSL pour $DOMAIN..."
+    certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email admin@$DOMAIN --redirect 2>/dev/null || {
+        log_warn "Certbot automatique echoue. Lancez manuellement :"
+        log_warn "  sudo certbot --nginx -d $DOMAIN"
+        return
+    }
+
+    log_ok "SSL configure pour https://$DOMAIN"
+}
+
 # ==================== SCRIPT DE BACKUP MONGODB ====================
 create_backup_script() {
     log_info "Creation du script de backup MongoDB..."
@@ -426,11 +477,8 @@ verify_installation() {
     echo "  INSTALLATION TERMINEE"
     echo "=============================================="
     echo ""
-    echo "  Application    : http://$(hostname -I | awk '{print $1}')"
-    if [ -n "$DOMAIN" ]; then
-        echo "  Domaine        : http://$DOMAIN"
-    fi
-    echo "  API            : http://localhost:$BACKEND_PORT/api"
+    echo "  Application    : https://$DOMAIN"
+    echo "  API            : https://$DOMAIN/api"
     echo "  MongoDB        : mongodb://localhost:27017/$MONGO_DB_NAME"
     echo ""
     echo "  Compte admin   : admin@example.com / Admin123!"
@@ -472,6 +520,7 @@ main() {
     deploy_application
     create_backend_service
     configure_nginx
+    setup_ssl
     create_backup_script
     verify_installation
 }
