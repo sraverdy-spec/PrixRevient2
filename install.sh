@@ -203,21 +203,29 @@ deploy_application() {
 
     # Creer l'environnement virtuel Python
     cd "$APP_DIR/backend"
-    python3 -m venv venv
+    if [ ! -d "venv" ]; then
+        python3 -m venv venv
+    fi
     source venv/bin/activate
 
     # Installer les dependances Python
+    pip install --upgrade pip
     if [ -f requirements.txt ]; then
-        pip install --upgrade pip
         pip install -r requirements.txt
-        pip install gunicorn uvicorn[standard]
     else
-        log_warn "requirements.txt non trouve - installez les dependances manuellement"
-        pip install --upgrade pip
-        pip install fastapi uvicorn[standard] gunicorn motor pymongo pydantic[email] \
-            python-jose[cryptography] passlib[bcrypt] python-multipart reportlab \
-            python-dotenv aiofiles
+        log_warn "requirements.txt non trouve - installation manuelle..."
+        pip install fastapi "uvicorn[standard]" gunicorn motor pymongo "pydantic[email]" \
+            "python-jose[cryptography]" PyJWT "passlib[bcrypt]" python-multipart reportlab \
+            python-dotenv aiofiles openpyxl
     fi
+
+    # Verification que les modules critiques sont bien installes
+    log_info "Verification des modules Python..."
+    venv/bin/python -c "from jose import jwt; print('  jose/jwt: OK')"
+    venv/bin/python -c "from passlib.context import CryptContext; print('  passlib: OK')"
+    venv/bin/python -c "import motor; print('  motor: OK')"
+    venv/bin/python -c "import fastapi; print('  fastapi: OK')"
+    venv/bin/python -c "import openpyxl; print('  openpyxl: OK')"
 
     deactivate
 
