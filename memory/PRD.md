@@ -1,95 +1,67 @@
 # PRD - Calculateur de Prix de Revient (PrixRevient)
 
 ## Probleme original
-Creer une application pour calculer le prix de revient d'un produit en prenant en compte les couts de main d'oeuvre, la recette de production (BOM/arbre de fabrication), la freinte (shrinkage) des matieres premieres, et les frais generaux. Ameliorations: imports automatiques (CSV/SFTP), gestion des droits (RBAC), export Excel, panneau de configuration global, parametrage des unites, fournisseurs sur recettes, duplication avec versions.
+Application pour calculer le prix de revient d'un produit avec BOM, freinte, main d'oeuvre, frais generaux. Ameliorations: imports CSV/SFTP, RBAC, export Excel, configuration globale, unites, fournisseurs/versions, API KPI publique.
 
 ## Architecture
 - **Frontend**: React + TailwindCSS + Shadcn UI + Recharts + Phosphor Icons
 - **Backend**: FastAPI (Python) + PyMongo + openpyxl
 - **Database**: MongoDB
-- **Auth**: Session cookies (httpOnly) + RBAC (3 roles: admin, manager, operator)
+- **Auth**: Session cookies (httpOnly) + RBAC (admin, manager, operator)
 
 ## Fonctionnalites implementees
 
-### Phase 1 - MVP (Complete)
-- [x] Authentification (login/logout) avec session cookies
-- [x] Tableau de bord avec statistiques et graphiques
-- [x] CRUD Matieres premieres
-- [x] CRUD Recettes de production
-- [x] Calcul du prix de revient (matieres + main d'oeuvre + frais generaux)
-- [x] Export PDF des recettes
+### Phase 1-4 (Complete)
+- MVP: auth, dashboard, CRUD matieres/recettes/fournisseurs/categories, calcul prix, export PDF
+- Avancees: freinte, import CSV, BOM, marge, export Excel
+- Import auto: API REST + SFTP scan
+- RBAC: 3 roles, protection API, sidebar filtre
 
-### Phase 2 - Fonctionnalites avancees (Complete)
-- [x] Freinte (pertes matieres) integree dans le calcul
-- [x] Import CSV matieres premieres
-- [x] Arbre de fabrication avec articles semi-finis
-- [x] Marge commerciale et prix de vente conseille
-- [x] CRUD Fournisseurs et Categories
-- [x] Tableau des couts complet + Export Excel (.xlsx)
-- [x] Comparaison de recettes
-- [x] Page BOM Tree + Import CSV arbre de fabrication
-- [x] Menu repliable (sidebar collapse) avec icones visibles
+### Phase 5 - Configuration globale (Complete)
+- Parametres 7 onglets: Apparence, Utilisateurs, Import, Taches planifiees, Unites, API, SSO
+- Themes couleurs, logo, sidebar/login dynamiques
 
-### Phase 3 - Import automatique (Complete)
-- [x] Import CSV arbre de fabrication (BOM)
-- [x] API REST pour import automatique
-- [x] Surveillance SFTP du dossier
-- [x] Centre d'Import avec 3 onglets (API, SFTP, Historique)
+### Phase 6 - Unites, Fournisseurs, Versions (Complete)
+- CRUD Unites de mesure (10 par defaut)
+- Fournisseur + version sur recettes
+- Duplication avec version auto-incrementee
+- Page Recettes en tableau groupe par fournisseur + filtres
+- Comparaison avec version/fournisseur dans les libelles
 
-### Phase 4 - Gestion des droits (Complete)
-- [x] 3 roles : Admin, Manager, Operateur
-- [x] Page de gestion des utilisateurs (admin only)
-- [x] Protection API par role (403 si insuffisant)
-- [x] Menu sidebar filtre par role
-
-### Phase 5 - Configuration globale (Complete - 30 Mars 2026)
-- [x] Page Parametres avec 6 onglets: Apparence, Utilisateurs, Import, Taches planifiees, Unites, SSO
-- [x] Themes de couleurs predifinis + couleurs personnalisees
-- [x] Upload/suppression de logo
-- [x] Sidebar et login dynamiques avec couleurs configurables
-- [x] Gestion des utilisateurs et Centre d'import integres dans Parametres
-
-### Phase 6 - Unites, Fournisseurs et Versions (Complete - 30 Mars 2026)
-- [x] CRUD Unites de mesure dans Parametres (auto-seed 10 unites par defaut)
-- [x] Selecteur d'unites dynamique dans les recettes
-- [x] Champ fournisseur (supplier_id, supplier_name) sur les recettes
-- [x] Champ version sur les recettes
-- [x] Duplication de recette avec increment automatique de version
-- [x] Page Recettes refaite en tableau groupe par fournisseur
-- [x] Filtres sur la page Recettes: recherche, fournisseur, version
-- [x] Colonne Fournisseur et Version dans le Tableau des couts
-- [x] Export Excel mis a jour avec Fournisseur et Version
-- [x] Tuiles du dashboard avec degrades colores
+### Phase 7 - Import CSV etendu + API KPI (Complete - 31 Mars 2026)
+- [x] Import CSV fournisseurs (POST /api/suppliers/import-csv)
+- [x] Import CSV categories (POST /api/categories/import-csv)
+- [x] Templates CSV telechargeables pour fournisseurs et categories
+- [x] Types fournisseurs/categories dans import auto + centre import
+- [x] API KPI publique avec 5 endpoints securises par cle API
+- [x] Documentation API integree (GET /api/public/kpi/doc)
+- [x] Gestion des cles API dans Parametres (creer/revoquer/activer/desactiver)
+- [x] Authentification par X-API-Key header ou ?api_key= query param
 
 ## Credentials
 - Admin: admin@example.com / Admin123!
 - Manager: manager@example.com / Manager123!
 - Operateur: operator@example.com / Operator123!
 
-## Routes frontend
-- / : Dashboard
-- /materials : Matieres premieres
-- /recipes : Recettes (tableau groupe par fournisseur)
-- /recipes/:id : Detail recette
-- /overheads : Frais generaux
-- /suppliers : Fournisseurs
-- /categories : Categories
-- /costs-table : Tableau des couts + Export Excel
-- /comparison : Comparaison
-- /bom : Arbre de fabrication
-- /settings : Parametres (admin only, 6 onglets)
+## API KPI publique
+- GET /api/public/kpi/doc → Documentation (public)
+- GET /api/public/kpi/summary → Resume KPI global
+- GET /api/public/kpi/costs → Couts detailles (?supplier=, ?version=)
+- GET /api/public/kpi/materials → Matieres premieres
+- GET /api/public/kpi/recipes → Recettes
+- GET /api/public/kpi/suppliers → Fournisseurs
+Auth: Header X-API-Key ou param ?api_key=
 
-## API endpoints cles
-- /api/units (GET/POST) - Unites de mesure
-- /api/units/{id} (PUT/DELETE) - CRUD unite
-- /api/recipes/{id}/duplicate (POST) - Dupliquer avec version++
-- /api/settings (GET/PUT) - Configuration
-- /api/reports/export-excel (GET) - Export Excel
-- /api/reports/all-costs (GET) - Tous les couts (avec fournisseur/version)
+## Deploiement
+- Domaine: calculprix.appli-sciad.com
+- VPS: Hostinger Ubuntu 22.04
+- Node 20 LTS requis
+- install.sh automatise tout (Node, MongoDB, Python, Nginx, SSL)
 
-## Backlog / Taches futures
-- P1: SSO backend (implementation reelle)
-- P1: Crontab execution automatique (scheduling reel)
-- P2: Module simulation de marges (scenarios what-if)
-- P2: Historique des prix et tendances
-- P3: Notifications d'alerte stock
+## Backlog
+- P1: SSO Google + Microsoft (bouton activation)
+- P2: Module simulation de marges (what-if)
+- P2: Alertes prix fournisseurs
+- P2: Historique des couts et tendances
+- P3: Export automatique planifie par email
+- P3: Mode multi-entreprise
