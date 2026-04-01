@@ -1,11 +1,11 @@
 # PRD - Calculateur de Prix de Revient (PrixRevient)
 
 ## Probleme original
-Application pour calculer le prix de revient d'un produit avec BOM, freinte, main d'oeuvre, frais generaux. Ameliorations progressives: imports CSV/SFTP, RBAC, export Excel, configuration globale, unites, fournisseurs/versions, API KPI, SSO, simulation, multi-sites, code_article, code fournisseur, logs import DB, simulation live.
+Application pour calculer le prix de revient d'un produit avec BOM, freinte, main d'oeuvre, frais generaux. Ameliorations progressives: imports CSV/SFTP, RBAC, export Excel, configuration globale, unites, fournisseurs/versions, API KPI, SSO, simulation, multi-sites, code_article, code fournisseur, logs import DB, simulation live, scheduler integre.
 
 ## Architecture
 - **Frontend**: React + TailwindCSS + Shadcn UI + Recharts + Phosphor Icons
-- **Backend**: FastAPI (Python) + PyMongo + openpyxl + httpx (OAuth)
+- **Backend**: FastAPI (Python) + PyMongo + openpyxl + httpx (OAuth) + APScheduler
 - **Database**: MongoDB
 - **Auth**: Session cookies (httpOnly) + RBAC (admin, manager, operator) + SSO OAuth2 (pret)
 - **Deploiement**: VPS Hostinger Ubuntu 22.04 (calculprix.appli-sciad.com)
@@ -36,12 +36,21 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - Simulation What-If: impact variation prix matiere sur recettes
 - Gestion multi-sites (CRUD sites)
 
-### Phase 9 - Code article, Code fournisseur, Logs import DB, Simulation live (Complete - 1 Avril 2026)
-- [x] code_article sur Matieres premieres (backend + frontend: formulaire + tableau)
-- [x] code sur Fournisseurs (backend + frontend: formulaire + tableau, sans delai/minimum)
-- [x] Logs d'import migres vers MongoDB (/api/import/logs)
-- [x] UI Historique des imports dans ImportCenter (onglet Historique avec actualisation)
-- [x] Simulation live temporaire sur RecipeDetail (mode simulation, edition quantite/prix/freinte/MO, recalcul temps reel sans mutation DB, reinitialisation)
+### Phase 9 - Code article, Logs import, Simulation live (Complete - 1 Avril 2026)
+- code_article sur Matieres premieres (backend + frontend)
+- code sur Fournisseurs (backend + frontend, sans delai/minimum)
+- Logs d'import migres vers MongoDB avec UI Historique
+- Simulation live temporaire sur RecipeDetail
+
+### Phase 10 - Scheduler integre + SSO valide (Complete - 1 Avril 2026)
+- [x] APScheduler integre au backend (BackgroundScheduler)
+- [x] Execution automatique des taches planifiees (sftp_scan, price_history)
+- [x] sync_scheduler() : synchronisation DB <-> scheduler a chaque CRUD
+- [x] /api/scheduler/status : etat du scheduler + prochaines executions
+- [x] last_status + last_result affiches dans l'UI avec badges couleur
+- [x] Type price_history : enregistrement automatique des prix de toutes les recettes
+- [x] SSO backend complet (Google + Microsoft OAuth2 avec callbacks)
+- [x] /api/auth/sso/status : detection SSO disponible pour login
 
 ## Credentials
 - Admin: admin@example.com / Admin123!
@@ -60,7 +69,7 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - /comparison : Comparaison
 - /bom : Arbre de fabrication
 - /simulation : Simulation what-if
-- /settings : Parametres (admin only, 8 onglets dont Import avec historique logs)
+- /settings : Parametres (admin only, 8 onglets)
 
 ## DB Schema
 - raw_materials: {..., code_article}
@@ -68,15 +77,10 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - import_logs: {filename, type, status, user, error_details, timestamp, result}
 - recipes: {..., version, supplier_name}
 - api_keys: {key, name, created_by, is_active}
-
-## Deploiement
-- Domaine: calculprix.appli-sciad.com
-- ZIP: prixrevient-deploy.zip
-- Mise a jour: wget ZIP + unzip -o + pip install -r + yarn build + systemctl restart
+- crontabs: {id, name, type, schedule, enabled, last_run, last_result, last_status, created_at}
+- price_history: {id, recipe_id, recipe_name, supplier_name, version, cost_per_unit, total_cost, recorded_at}
 
 ## Backlog
-- P1: Logique backend SSO Google/Microsoft (activation reelle)
-- P1: Logique backend Crontab (gestion taches planifiees)
 - P2: Historique des couts - graphique evolution temporelle sur Dashboard
 - P2: Alertes prix - notifications visuelles sur le Dashboard
 - P2: Champ site_id sur recettes et matieres avec filtre par site
