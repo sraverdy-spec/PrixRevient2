@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
   ArrowLeft, Plus, Trash, Calculator, Package, Clock, Gear,
-  FilePdf, TreeStructure, Percent, CurrencyCircleDollar
+  FilePdf, TreeStructure, Percent, CurrencyCircleDollar, ArrowCounterClockwise, PencilSimple
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,10 @@ const RecipeDetail = () => {
   const [subRecipeForm, setSubRecipeForm] = useState({ sub_recipe_id: "", quantity: "", unit: "unite" });
   const [laborForm, setLaborForm] = useState({ description: "", hours: "", hourly_rate: "" });
   const [selectedOverheads, setSelectedOverheads] = useState([]);
+  // Simulation en ligne : modifications temporaires
+  const [simMode, setSimMode] = useState(false);
+  const [simIngredients, setSimIngredients] = useState({});  // { index: { quantity, unit_price, freinte } }
+  const [simLabor, setSimLabor] = useState({});  // { index: { hours, hourly_rate } }
 
   const fetchRecipe = useCallback(async () => {
     try {
@@ -178,6 +182,73 @@ const RecipeDetail = () => {
     setSelectedOverheads(prev => prev.includes(ohId) ? prev.filter(i => i !== ohId) : [...prev, ohId]);
   };
 
+  // === Simulation en ligne ===
+  const getSimIngValue = (index, field, original) => {
+    if (simIngredients[index] && simIngredients[index][field] !== undefined) return simIngredients[index][field];
+    return original;
+  };
+  const getSimLaborValue = (index, field, original) => {
+    if (simLabor[index] && simLabor[index][field] !== undefined) return simLabor[index][field];
+    return original;
+  };
+  const updateSimIng = (index, field, value) => {
+    setSimIngredients(prev => ({ ...prev, [index]: { ...prev[index], [field]: parseFloat(value) || 0 } }));
+  };
+  const updateSimLabor = (index, field, value) => {
+    setSimLabor(prev => ({ ...prev, [index]: { ...prev[index], [field]: parseFloat(value) || 0 } }));
+  };
+  const isIngModified = (index) => simIngredients[index] && Object.keys(simIngredients[index]).length > 0;
+  const isLaborModified = (index) => simLabor[index] && Object.keys(simLabor[index]).length > 0;
+  const resetSim = () => { setSimIngredients({}); setSimLabor({}); };
+  const hasSimChanges = Object.keys(simIngredients).length > 0 || Object.keys(simLabor).length > 0;
+
+  // Calcul live des coûts simulés
+  const computeSimCost = () => {
+    if (!recipe || !costBreakdown) return null;
+    const ingredients = recipe.ingredients || [];
+    let totalMatCost = 0;
+    let totalFreinte = 0;
+    ingredients.forEach((ing, i) => {
+      if (ing.is_sub_recipe) {
+        const sub = costBreakdown?.sub_recipe_details?.find(s => s.name === ing.material_name);
+        totalMatCost += sub ? sub.total_cost : 0;
+      } else {
+        const rawIdx = ingredients.filter((x, j) => j < i && !x.is_sub_recipe).length;
+        const qty = getSimIngValue(rawIdx, "quantity", ing.quantity);
+        const price = getSimIngValue(rawIdx, "unit_price", ing.unit_price);
+        const freinte = getSimIngValue(rawIdx, "freinte", ing.freinte || 0);
+        const base = qty * price;
+        const freinteVal = base * freinte / 100;
+        totalMatCost += base + freinteVal;
+        totalFreinte += freinteVal;
+      }
+    });
+    let totalLabor = 0;
+    (recipe.labor_costs || []).forEach((lab, i) => {
+      const hrs = getSimLaborValue(i, "hours", lab.hours);
+      const rate = getSimLaborValue(i, "hourly_rate", lab.hourly_rate);
+      totalLabor += hrs * rate;
+    });
+    const totalOverhead = costBreakdown.total_overhead_cost;
+    const totalCost = totalMatCost + totalLabor + totalOverhead;
+    const outputQty = recipe.output_quantity || 1;
+    const costPerUnit = totalCost / outputQty;
+    const margin = recipe.target_margin || 30;
+    const suggestedPrice = margin < 100 ? costPerUnit / (1 - margin / 100) : 0;
+    return {
+      total_material_cost: totalMatCost,
+      total_freinte_cost: totalFreinte,
+      total_labor_cost: totalLabor,
+      total_overhead_cost: totalOverhead,
+      total_cost: totalCost,
+      cost_per_unit: costPerUnit,
+      suggested_price: suggestedPrice,
+      target_margin: margin,
+    };
+  };
+
+  const activeCost = hasSimChanges ? computeSimCost() : costBreakdown;
+
   const handleExportPdf = () => {
     window.open(`${API}/recipes/${id}/pdf`, '_blank');
     toast.success("Generation du PDF en cours...");
@@ -230,46 +301,59 @@ const RecipeDetail = () => {
       </div>
 
       {/* Cost Summary Cards */}
-      {costBreakdown && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8" data-testid="cost-summary-cards">
-          <div className="stat-card" data-testid="material-cost-card">
-            <div className="flex items-center gap-2 mb-2">
-              <Package size={18} className="text-[#002FA7]" />
-              <span className="stat-label">Matieres</span>
+      {activeCost && (
+        <div className="mb-8">
+          {hasSimChanges && (
+            <div className="flex items-center justify-between mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center gap-2 text-amber-800">
+                <PencilSimple size={18} />
+                <span className="text-sm font-medium">Mode simulation active — Les valeurs ci-dessous sont recalculees en temps reel</span>
+              </div>
+              <Button size="sm" variant="outline" onClick={resetSim} className="border-amber-300 text-amber-700 hover:bg-amber-100" data-testid="reset-sim-btn">
+                <ArrowCounterClockwise size={14} className="mr-1" /> Reinitialiser
+              </Button>
             </div>
-            <div className="text-2xl font-bold font-mono">{costBreakdown.total_material_cost.toFixed(2)} EUR</div>
-            {costBreakdown.total_freinte_cost > 0 && (
-              <p className="text-xs text-red-500 mt-1">dont {costBreakdown.total_freinte_cost.toFixed(2)} EUR freinte</p>
-            )}
-          </div>
-          <div className="stat-card" data-testid="labor-cost-card">
-            <div className="flex items-center gap-2 mb-2">
-              <Clock size={18} className="text-[#10B981]" />
-              <span className="stat-label">Main d'oeuvre</span>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4" data-testid="cost-summary-cards">
+            <div className="stat-card" data-testid="material-cost-card">
+              <div className="flex items-center gap-2 mb-2">
+                <Package size={18} className="text-[#002FA7]" />
+                <span className="stat-label">Matieres</span>
+              </div>
+              <div className="text-2xl font-bold font-mono">{activeCost.total_material_cost.toFixed(2)} EUR</div>
+              {activeCost.total_freinte_cost > 0 && (
+                <p className="text-xs text-red-500 mt-1">dont {activeCost.total_freinte_cost.toFixed(2)} EUR freinte</p>
+              )}
             </div>
-            <div className="text-2xl font-bold font-mono text-[#10B981]">{costBreakdown.total_labor_cost.toFixed(2)} EUR</div>
-          </div>
-          <div className="stat-card" data-testid="overhead-cost-card">
-            <div className="flex items-center gap-2 mb-2">
-              <Gear size={18} className="text-[#F59E0B]" />
-              <span className="stat-label">Frais generaux</span>
+            <div className="stat-card" data-testid="labor-cost-card">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock size={18} className="text-[#10B981]" />
+                <span className="stat-label">Main d'oeuvre</span>
+              </div>
+              <div className="text-2xl font-bold font-mono text-[#10B981]">{activeCost.total_labor_cost.toFixed(2)} EUR</div>
             </div>
-            <div className="text-2xl font-bold font-mono text-[#F59E0B]">{costBreakdown.total_overhead_cost.toFixed(2)} EUR</div>
-          </div>
-          <div className="stat-card bg-[#002FA7]" data-testid="total-cost-card">
-            <div className="flex items-center gap-2 mb-2">
-              <Calculator size={18} className="text-white" />
-              <span className="stat-label text-blue-100">Prix revient / unite</span>
+            <div className="stat-card" data-testid="overhead-cost-card">
+              <div className="flex items-center gap-2 mb-2">
+                <Gear size={18} className="text-[#F59E0B]" />
+                <span className="stat-label">Frais generaux</span>
+              </div>
+              <div className="text-2xl font-bold font-mono text-[#F59E0B]">{activeCost.total_overhead_cost.toFixed(2)} EUR</div>
             </div>
-            <div className="text-2xl font-bold font-mono text-white">{costBreakdown.cost_per_unit.toFixed(2)} EUR</div>
-            <p className="text-xs text-blue-200 mt-1">Total: {costBreakdown.total_cost.toFixed(2)} EUR</p>
-          </div>
-          <div className="stat-card bg-[#10B981]" data-testid="suggested-price-card">
-            <div className="flex items-center gap-2 mb-2">
-              <CurrencyCircleDollar size={18} className="text-white" />
-              <span className="stat-label text-green-100">Prix vente (marge {costBreakdown.target_margin}%)</span>
+            <div className={`stat-card ${hasSimChanges ? "bg-amber-500" : "bg-[#002FA7]"}`} data-testid="total-cost-card">
+              <div className="flex items-center gap-2 mb-2">
+                <Calculator size={18} className="text-white" />
+                <span className="stat-label text-white/80">Prix revient / unite</span>
+              </div>
+              <div className="text-2xl font-bold font-mono text-white">{activeCost.cost_per_unit.toFixed(2)} EUR</div>
+              <p className="text-xs text-white/70 mt-1">Total: {activeCost.total_cost.toFixed(2)} EUR</p>
             </div>
-            <div className="text-2xl font-bold font-mono text-white">{costBreakdown.suggested_price.toFixed(2)} EUR</div>
+            <div className={`stat-card ${hasSimChanges ? "bg-amber-600" : "bg-[#10B981]"}`} data-testid="suggested-price-card">
+              <div className="flex items-center gap-2 mb-2">
+                <CurrencyCircleDollar size={18} className="text-white" />
+                <span className="stat-label text-white/80">Prix vente (marge {activeCost.target_margin}%)</span>
+              </div>
+              <div className="text-2xl font-bold font-mono text-white">{activeCost.suggested_price.toFixed(2)} EUR</div>
+            </div>
           </div>
         </div>
       )}
@@ -281,9 +365,17 @@ const RecipeDetail = () => {
           <div className="bg-white border border-zinc-200 rounded-lg" data-testid="ingredients-section">
             <div className="flex items-center justify-between p-4 border-b border-zinc-100">
               <h3 className="font-semibold text-zinc-900">Matieres premieres</h3>
-              <Button size="sm" onClick={() => setIsIngredientDialogOpen(true)} className="bg-[#002FA7] hover:bg-[#002482]" data-testid="add-ingredient-btn">
-                <Plus size={16} className="mr-1" /> Ajouter
-              </Button>
+              <div className="flex gap-2">
+                {rawIngredients.length > 0 && (
+                  <Button size="sm" variant={simMode ? "default" : "outline"} onClick={() => { setSimMode(!simMode); if (simMode) resetSim(); }}
+                    className={simMode ? "bg-amber-500 hover:bg-amber-600" : ""} data-testid="toggle-sim-btn">
+                    <PencilSimple size={16} className="mr-1" /> {simMode ? "Quitter simulation" : "Simuler"}
+                  </Button>
+                )}
+                <Button size="sm" onClick={() => setIsIngredientDialogOpen(true)} className="bg-[#002FA7] hover:bg-[#002482]" data-testid="add-ingredient-btn">
+                  <Plus size={16} className="mr-1" /> Ajouter
+                </Button>
+              </div>
             </div>
             {rawIngredients.length === 0 ? (
               <div className="p-8 text-center text-zinc-500" data-testid="no-ingredients-message">
@@ -304,18 +396,45 @@ const RecipeDetail = () => {
                 </thead>
                 <tbody>
                   {rawIngredients.map((ing, index) => {
-                    const baseCost = ing.quantity * ing.unit_price;
-                    const freinteCost = baseCost * (ing.freinte || 0) / 100;
+                    const qty = getSimIngValue(index, "quantity", ing.quantity);
+                    const price = getSimIngValue(index, "unit_price", ing.unit_price);
+                    const freinte = getSimIngValue(index, "freinte", ing.freinte || 0);
+                    const baseCost = qty * price;
+                    const freinteCost = baseCost * freinte / 100;
                     const totalCost = baseCost + freinteCost;
+                    const modified = isIngModified(index);
                     return (
-                      <tr key={index} data-testid={`ingredient-row-${index}`}>
-                        <td className="font-medium">{ing.material_name}</td>
-                        <td className="text-right">{ing.quantity} {ing.unit}</td>
-                        <td className="text-right font-mono">{ing.unit_price.toFixed(2)} EUR</td>
-                        <td className="text-right">
-                          {ing.freinte > 0 ? <span className="text-red-500">{ing.freinte}%</span> : <span className="text-zinc-400">-</span>}
+                      <tr key={index} className={modified ? "bg-amber-50" : ""} data-testid={`ingredient-row-${index}`}>
+                        <td className="font-medium">
+                          {ing.material_name}
+                          {ing.code_article && <span className="text-xs text-zinc-400 ml-1">({ing.code_article})</span>}
                         </td>
-                        <td className="text-right font-mono font-semibold">{totalCost.toFixed(2)} EUR</td>
+                        <td className="text-right">
+                          {simMode ? (
+                            <input type="number" step="0.01" value={qty} onChange={e => updateSimIng(index, "quantity", e.target.value)}
+                              className="w-20 text-right border border-zinc-300 rounded px-1 py-0.5 text-sm font-mono bg-white focus:border-amber-400 focus:outline-none" data-testid={`sim-qty-${index}`} />
+                          ) : (
+                            <span>{qty} {ing.unit}</span>
+                          )}
+                          {!simMode && <span className="text-zinc-400 ml-1">{ing.unit}</span>}
+                        </td>
+                        <td className="text-right">
+                          {simMode ? (
+                            <input type="number" step="0.01" value={price} onChange={e => updateSimIng(index, "unit_price", e.target.value)}
+                              className="w-20 text-right border border-zinc-300 rounded px-1 py-0.5 text-sm font-mono bg-white focus:border-amber-400 focus:outline-none" data-testid={`sim-price-${index}`} />
+                          ) : (
+                            <span className="font-mono">{price.toFixed(2)} EUR</span>
+                          )}
+                        </td>
+                        <td className="text-right">
+                          {simMode ? (
+                            <input type="number" step="0.1" value={freinte} onChange={e => updateSimIng(index, "freinte", e.target.value)}
+                              className="w-16 text-right border border-zinc-300 rounded px-1 py-0.5 text-sm font-mono bg-white focus:border-amber-400 focus:outline-none" data-testid={`sim-freinte-${index}`} />
+                          ) : (
+                            freinte > 0 ? <span className="text-red-500">{freinte}%</span> : <span className="text-zinc-400">-</span>
+                          )}
+                        </td>
+                        <td className={`text-right font-mono font-semibold ${modified ? "text-amber-700" : ""}`}>{totalCost.toFixed(2)} EUR</td>
                         <td className="text-right">
                           <button onClick={() => handleRemoveIngredient((recipe.ingredients || []).indexOf(ing))} className="p-1 hover:bg-red-50 rounded" data-testid={`remove-ingredient-${index}`}>
                             <Trash size={14} className="text-red-500" />
@@ -403,19 +522,38 @@ const RecipeDetail = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {recipe.labor_costs.map((labor, index) => (
-                    <tr key={index} data-testid={`labor-row-${index}`}>
-                      <td className="font-medium">{labor.description}</td>
-                      <td className="text-right">{labor.hours} h</td>
-                      <td className="text-right font-mono">{labor.hourly_rate.toFixed(2)} EUR/h</td>
-                      <td className="text-right font-mono font-semibold text-[#10B981]">{(labor.hours * labor.hourly_rate).toFixed(2)} EUR</td>
-                      <td className="text-right">
-                        <button onClick={() => handleRemoveLabor(index)} className="p-1 hover:bg-red-50 rounded" data-testid={`remove-labor-${index}`}>
-                          <Trash size={14} className="text-red-500" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {recipe.labor_costs.map((labor, index) => {
+                    const hrs = getSimLaborValue(index, "hours", labor.hours);
+                    const rate = getSimLaborValue(index, "hourly_rate", labor.hourly_rate);
+                    const modified = isLaborModified(index);
+                    return (
+                      <tr key={index} className={modified ? "bg-amber-50" : ""} data-testid={`labor-row-${index}`}>
+                        <td className="font-medium">{labor.description}</td>
+                        <td className="text-right">
+                          {simMode ? (
+                            <input type="number" step="0.1" value={hrs} onChange={e => updateSimLabor(index, "hours", e.target.value)}
+                              className="w-16 text-right border border-zinc-300 rounded px-1 py-0.5 text-sm font-mono bg-white focus:border-amber-400 focus:outline-none" data-testid={`sim-hours-${index}`} />
+                          ) : (
+                            <span>{hrs} h</span>
+                          )}
+                        </td>
+                        <td className="text-right">
+                          {simMode ? (
+                            <input type="number" step="0.01" value={rate} onChange={e => updateSimLabor(index, "hourly_rate", e.target.value)}
+                              className="w-20 text-right border border-zinc-300 rounded px-1 py-0.5 text-sm font-mono bg-white focus:border-amber-400 focus:outline-none" data-testid={`sim-rate-${index}`} />
+                          ) : (
+                            <span className="font-mono">{rate.toFixed(2)} EUR/h</span>
+                          )}
+                        </td>
+                        <td className={`text-right font-mono font-semibold ${modified ? "text-amber-700" : "text-[#10B981]"}`}>{(hrs * rate).toFixed(2)} EUR</td>
+                        <td className="text-right">
+                          <button onClick={() => handleRemoveLabor(index)} className="p-1 hover:bg-red-50 rounded" data-testid={`remove-labor-${index}`}>
+                            <Trash size={14} className="text-red-500" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}

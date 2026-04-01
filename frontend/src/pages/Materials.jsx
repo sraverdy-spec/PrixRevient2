@@ -35,6 +35,7 @@ const Materials = () => {
   const [materials, setMaterials] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState("");
@@ -44,12 +45,12 @@ const Materials = () => {
   const [selectedMaterial, setSelectedMaterial] = useState(null);
   const fileInputRef = useRef(null);
   const [formData, setFormData] = useState({
-    name: "", unit: "kg", unit_price: "", supplier_name: "",
+    name: "", code_article: "", unit: "kg", unit_price: "", supplier_name: "",
     category_id: "", description: "", freinte: "0",
   });
 
   useEffect(() => {
-    Promise.all([fetchMaterials(), fetchSuppliers(), fetchCategories()]);
+    Promise.all([fetchMaterials(), fetchSuppliers(), fetchCategories(), fetchUnits()]);
   }, []);
 
   const fetchMaterials = async () => {
@@ -77,11 +78,16 @@ const Materials = () => {
     } catch {}
   };
 
+  const fetchUnits = async () => {
+    try { setUnits((await axios.get(`${API}/units`)).data); } catch {}
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       const data = {
         name: formData.name,
+        code_article: formData.code_article || null,
         unit: formData.unit,
         unit_price: parseFloat(formData.unit_price),
         supplier_name: formData.supplier_name,
@@ -109,6 +115,7 @@ const Materials = () => {
     setSelectedMaterial(material);
     setFormData({
       name: material.name,
+      code_article: material.code_article || "",
       unit: material.unit,
       unit_price: material.unit_price.toString(),
       supplier_name: material.supplier_name || "",
@@ -133,7 +140,7 @@ const Materials = () => {
 
   const resetForm = () => {
     setSelectedMaterial(null);
-    setFormData({ name: "", unit: "kg", unit_price: "", supplier_name: "", category_id: "", description: "", freinte: "0" });
+    setFormData({ name: "", code_article: "", unit: "kg", unit_price: "", supplier_name: "", category_id: "", description: "", freinte: "0" });
   };
 
   const handleFileUpload = async (event) => {
@@ -234,6 +241,7 @@ const Materials = () => {
             <thead>
               <tr>
                 <th>Nom</th>
+                <th>Code</th>
                 <th>Unite</th>
                 <th className="text-right">Prix Unitaire</th>
                 <th className="text-right">Freinte %</th>
@@ -246,6 +254,7 @@ const Materials = () => {
               {filteredMaterials.map((material, index) => (
                 <tr key={material.id} data-testid={`material-row-${index}`}>
                   <td className="font-medium">{material.name}</td>
+                  <td className="text-xs text-zinc-400 font-mono">{material.code_article || "-"}</td>
                   <td><span className="badge badge-info">{material.unit}</span></td>
                   <td className="text-right font-mono">{(material.unit_price || 0).toFixed(2)} EUR</td>
                   <td className="text-right">
@@ -286,9 +295,15 @@ const Materials = () => {
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nom *</Label>
-                <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Ex: Farine de ble" required data-testid="material-name-input" />
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="name">Nom *</Label>
+                  <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Ex: Farine de ble" required data-testid="material-name-input" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="code_article">Code article</Label>
+                  <Input id="code_article" value={formData.code_article} onChange={(e) => setFormData({ ...formData, code_article: e.target.value })} placeholder="SKU / Ref" data-testid="material-code-input" />
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
@@ -296,7 +311,9 @@ const Materials = () => {
                   <Select value={formData.unit} onValueChange={(v) => setFormData({ ...formData, unit: v })}>
                     <SelectTrigger data-testid="material-unit-select"><SelectValue placeholder="Unite" /></SelectTrigger>
                     <SelectContent>
-                      {UNITS.map((u) => <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>)}
+                      {units.length > 0 ? units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name} ({u.abbreviation})</SelectItem>) : (
+                        UNITS.map((u) => <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>)
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

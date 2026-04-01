@@ -138,6 +138,7 @@ class Category(CategoryBase):
 # Supplier Model
 class SupplierBase(BaseModel):
     name: str
+    code: Optional[str] = None
     contact: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -151,6 +152,7 @@ class Supplier(SupplierBase):
 # Raw Material with freinte (waste/loss)
 class RawMaterialBase(BaseModel):
     name: str
+    code_article: Optional[str] = None
     unit: str
     unit_price: float
     supplier_id: Optional[str] = None
@@ -1446,29 +1448,26 @@ async def import_status():
     }
 
 def _append_import_log(entry):
-    import json
-    logs = []
-    if os.path.exists(IMPORT_LOG_FILE):
-        try:
-            with open(IMPORT_LOG_FILE, 'r') as f:
-                logs = json.load(f)
-        except Exception:
-            logs = []
-    logs.append(entry)
-    logs = logs[-100:]
-    with open(IMPORT_LOG_FILE, 'w') as f:
-        json.dump(logs, f, default=str)
+    """Save import log to MongoDB"""
+    import asyncio
+    entry["id"] = str(uuid.uuid4())
+    if "timestamp" not in entry:
+        entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+    try:
+        loop = asyncio.get_event_loop()
+        loop.create_task(db.import_logs.insert_one(entry))
+    except:
+        pass
 
 def _read_import_logs(limit=20):
-    import json
-    if not os.path.exists(IMPORT_LOG_FILE):
-        return []
-    try:
-        with open(IMPORT_LOG_FILE, 'r') as f:
-            logs = json.load(f)
-        return logs[-limit:]
-    except Exception:
-        return []
+    """Read import logs - for sync context, return empty (use API endpoint)"""
+    return []
+
+@api_router.get("/import/logs")
+async def get_import_logs(limit: int = 50):
+    """Get import logs from database"""
+    logs = await db.import_logs.find({}, {"_id": 0}).sort("timestamp", -1).to_list(limit)
+    return logs
 
 # ================= PDF EXPORT =================
 
