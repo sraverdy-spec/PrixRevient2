@@ -28,6 +28,9 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 import base64
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+import asyncio
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -1810,10 +1813,12 @@ async def create_crontab(request: Request, admin: dict = Depends(require_admin))
         "enabled": data.get("enabled", True),
         "last_run": None,
         "last_result": None,
+        "last_status": None,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.crontabs.insert_one(crontab)
     crontab.pop("_id", None)
+    await sync_scheduler()
     return crontab
 
 @api_router.put("/crontabs/{crontab_id}")
@@ -1823,11 +1828,13 @@ async def update_crontab(crontab_id: str, request: Request, admin: dict = Depend
     data.pop("id", None)
     await db.crontabs.update_one({"id": crontab_id}, {"$set": data})
     result = await db.crontabs.find_one({"id": crontab_id}, {"_id": 0})
+    await sync_scheduler()
     return result
 
 @api_router.delete("/crontabs/{crontab_id}")
 async def delete_crontab(crontab_id: str, admin: dict = Depends(require_admin)):
     await db.crontabs.delete_one({"id": crontab_id})
+    await sync_scheduler()
     return {"message": "Crontab supprime"}
 
 @api_router.post("/crontabs/{crontab_id}/run")
@@ -1836,15 +1843,134 @@ async def run_crontab_now(crontab_id: str, admin: dict = Depends(require_admin))
     if not crontab:
         raise HTTPException(status_code=404, detail="Crontab non trouve")
     
-    result = None
-    if crontab["type"] == "sftp_scan":
-        result = await sftp_scan()
+    result = await _execute_cron_task(crontab)
+    return {"message": "Execute", "result": result}
+
+
+async def _execute_cron_task(crontab: dict):
+    """Execute a crontab task and update its status in DB."""
+    task_type = crontab.get("type", "sftp_scan")
+    crontab_id = crontab["id"]
+    result_str = "OK"
+    status = "success"
+    try:
+        if task_type == "sftp_scan":
+            result = await sftp_scan()
+            result_str = str(result) if result else "OK"
+        elif task_type == "price_history":
+            recipes = await db.recipes.find({}, {"_id": 0}).to_list(5000)
+            recorded = 0
+            for recipe in recipes:
+                try:
+                    cost = await calculate_cost(recipe["id"])
+                    entry = {
+                        "id": str(uuid.uuid4()),
+                        "recipe_id": recipe["id"],
+                        "recipe_name": recipe["name"],
+                        "supplier_name": recipe.get("supplier_name", ""),
+                        "version": recipe.get("version", ""),
+                        "cost_per_unit": cost["cost_per_unit"],
+                        "total_cost": cost["total_cost"],
+                        "recorded_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await db.price_history.insert_one(entry)
+                    recorded += 1
+                except Exception:
+                    pass
+            result_str = f"{recorded} recettes enregistrees"
+        else:
+            result_str = f"Type inconnu: {task_type}"
+            status = "error"
+    except Exception as e:
+        result_str = str(e)
+        status = "error"
     
     await db.crontabs.update_one({"id": crontab_id}, {"$set": {
         "last_run": datetime.now(timezone.utc).isoformat(),
-        "last_result": str(result) if result else "OK"
+        "last_result": result_str,
+        "last_status": status,
     }})
-    return {"message": "Execute", "result": result}
+    return result_str
+
+
+# ================= BACKGROUND SCHEDULER =================
+
+scheduler = BackgroundScheduler()
+_scheduler_started = False
+
+
+def _run_cron_in_loop(crontab_id: str):
+    """Bridge from sync scheduler to async task execution."""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    async def _run():
+        crontab = await db.crontabs.find_one({"id": crontab_id}, {"_id": 0})
+        if crontab and crontab.get("enabled", False):
+            await _execute_cron_task(crontab)
+    
+    loop.run_until_complete(_run())
+
+
+def _parse_cron_schedule(schedule_str: str):
+    """Parse cron expression to APScheduler CronTrigger."""
+    parts = schedule_str.strip().split()
+    if len(parts) != 5:
+        return None
+    return CronTrigger(
+        minute=parts[0],
+        hour=parts[1],
+        day=parts[2],
+        month=parts[3],
+        day_of_week=parts[4],
+    )
+
+
+async def sync_scheduler():
+    """Load all enabled crontabs from DB and schedule them."""
+    global _scheduler_started
+    
+    # Remove all existing cron jobs
+    for job in scheduler.get_jobs():
+        if job.id.startswith("cron_"):
+            scheduler.remove_job(job.id)
+    
+    crontabs = await db.crontabs.find({"enabled": True}, {"_id": 0}).to_list(100)
+    for cron in crontabs:
+        trigger = _parse_cron_schedule(cron.get("schedule", "*/30 * * * *"))
+        if trigger:
+            job_id = f"cron_{cron['id']}"
+            scheduler.add_job(
+                _run_cron_in_loop,
+                trigger=trigger,
+                id=job_id,
+                args=[cron["id"]],
+                replace_existing=True,
+                misfire_grace_time=60,
+            )
+    
+    if not _scheduler_started:
+        scheduler.start()
+        _scheduler_started = True
+    
+    logger.info(f"Scheduler synced: {len(crontabs)} tache(s) active(s)")
+
+
+@api_router.get("/scheduler/status")
+async def get_scheduler_status(admin: dict = Depends(require_admin)):
+    """Get the scheduler status and next run times."""
+    jobs = []
+    for job in scheduler.get_jobs():
+        if job.id.startswith("cron_"):
+            cron_id = job.id.replace("cron_", "")
+            jobs.append({
+                "cron_id": cron_id,
+                "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
+            })
+    return {"running": _scheduler_started, "jobs": jobs}
 
 # ================= DASHBOARD STATS =================
 
@@ -2498,7 +2624,12 @@ async def startup_event():
             hashed = hash_password(admin_password)
             await db.users.insert_one({"email": admin_email, "password_hash": hashed, "name": "Admin", "role": "admin", "is_active": True, "created_at": datetime.now(timezone.utc)})
             logger.info(f"Admin user created: {admin_email}")
+    
+    # Start background scheduler
+    await sync_scheduler()
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    if _scheduler_started:
+        scheduler.shutdown(wait=False)
     client.close()

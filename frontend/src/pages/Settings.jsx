@@ -376,7 +376,13 @@ export default function Settings() {
         <TabsContent value="crontabs">
           <div className="bg-white border border-zinc-200 rounded-lg p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="font-semibold text-zinc-900 flex items-center gap-2"><Timer size={20} /> Taches planifiees</h3>
+              <div>
+                <h3 className="font-semibold text-zinc-900 flex items-center gap-2"><Timer size={20} /> Taches planifiees</h3>
+                <p className="text-xs text-zinc-500 mt-1 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-[#10B981] inline-block"></span>
+                  Scheduler actif — les taches s'executent automatiquement
+                </p>
+              </div>
               <Button onClick={() => setIsCronDialogOpen(true)} style={{ backgroundColor: settings.primary_color }} data-testid="add-cron-btn">
                 <Plus size={16} className="mr-2" /> Nouvelle tache
               </Button>
@@ -385,18 +391,28 @@ export default function Settings() {
               <div className="text-center py-8 text-zinc-500">
                 <Timer size={40} className="mx-auto mb-3 text-zinc-300" />
                 <p>Aucune tache planifiee</p>
-                <p className="text-sm mt-1">Creez une tache pour automatiser les imports SFTP</p>
+                <p className="text-sm mt-1">Creez une tache pour automatiser les imports SFTP ou l'enregistrement des prix</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {crontabs.map((cron, i) => (
                   <div key={cron.id} className={"flex items-center justify-between p-4 border rounded-lg " + (cron.enabled ? "border-zinc-200 bg-white" : "border-zinc-100 bg-zinc-50 opacity-60")} data-testid={"cron-row-" + i}>
                     <div className="flex items-center gap-4">
-                      <Checkbox checked={cron.enabled} onCheckedChange={() => handleToggleCron(cron)} />
+                      <Checkbox checked={cron.enabled} onCheckedChange={() => handleToggleCron(cron)} data-testid={"cron-toggle-" + i} />
                       <div>
                         <p className="font-medium">{cron.name}</p>
-                        <p className="text-xs text-zinc-500 font-mono">{cron.schedule} | {cron.type}</p>
-                        {cron.last_run && <p className="text-xs text-zinc-400 mt-0.5">Dernier: {new Date(cron.last_run).toLocaleString("fr-FR")}</p>}
+                        <p className="text-xs text-zinc-500 font-mono">{cron.schedule} | {cron.type === "sftp_scan" ? "Scan SFTP" : cron.type === "price_history" ? "Historique prix" : cron.type}</p>
+                        {cron.last_run && (
+                          <p className="text-xs mt-0.5">
+                            <span className="text-zinc-400">Dernier: {new Date(cron.last_run).toLocaleString("fr-FR")}</span>
+                            {cron.last_status && (
+                              <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${cron.last_status === "success" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                                {cron.last_status === "success" ? "OK" : "Erreur"}
+                              </span>
+                            )}
+                            {cron.last_result && <span className="text-zinc-400 ml-1">— {cron.last_result}</span>}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -424,6 +440,7 @@ export default function Settings() {
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="sftp_scan">Scan SFTP</SelectItem>
+                        <SelectItem value="price_history">Enregistrement historique prix</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

@@ -1,0 +1,87 @@
+{
+  "summary": "Iteration 9 testing complete. All 14 backend tests passed. All frontend UI tests passed. Tested: Crontab CRUD operations, manual task execution, scheduler status, task toggle, and SSO status endpoint.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration9_crontab_scheduler.py",
+    "/app/test_reports/pytest/pytest_results_iter9.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration9_crontab_scheduler.py"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 tests passed)",
+    "frontend": "100% (all UI tests passed)"
+  },
+  "test_credentials": {
+    "admin": {"email": "admin@example.com", "password": "Admin123!", "role": "admin"},
+    "manager": {"email": "manager@example.com", "password": "Manager123!", "role": "manager"},
+    "operator": {"email": "operator@example.com", "password": "Operator123!", "role": "operator"}
+  },
+  "seed_data_creation": "No seed data created - tests use dynamic creation and cleanup",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All iteration 9 features working correctly. APScheduler is integrated and running in background. Crontab CRUD endpoints require admin role. Scheduler syncs automatically when crontabs are created/updated/deleted. SSO endpoints exist but return disabled status since no client keys are configured (expected behavior).",
+  "features_tested": {
+    "crontab_crud": {
+      "POST /api/crontabs": "PASS - Creates crontab with id, name, type, schedule, enabled, last_run, last_result, last_status",
+      "GET /api/crontabs": "PASS - Returns list of all crontabs",
+      "PUT /api/crontabs/{id}": "PASS - Updates crontab fields (name, schedule, enabled)",
+      "DELETE /api/crontabs/{id}": "PASS - Deletes crontab and removes from scheduler"
+    },
+    "crontab_task_types": {
+      "sftp_scan": "PASS - Executes SFTP scan and returns result with files_scanned count",
+      "price_history": "PASS - Records price history for all recipes, returns 'X recettes enregistrees'"
+    },
+    "crontab_manual_run": {
+      "POST /api/crontabs/{id}/run": "PASS - Executes task immediately",
+      "last_run_updated": "PASS - last_run timestamp updated after execution",
+      "last_status_updated": "PASS - last_status set to 'success' or 'error'",
+      "last_result_updated": "PASS - last_result contains execution details"
+    },
+    "scheduler_status": {
+      "GET /api/scheduler/status": "PASS - Returns running=true and jobs list",
+      "next_run_times": "PASS - Active jobs show next_run ISO timestamp",
+      "disabled_jobs_removed": "PASS - Disabled crontabs removed from scheduler"
+    },
+    "crontab_toggle": {
+      "enable_disable": "PASS - PUT with enabled=false disables task",
+      "scheduler_sync": "PASS - Disabled tasks removed from scheduler jobs"
+    },
+    "sso_status": {
+      "GET /api/auth/sso/status": "PASS - Public endpoint returns google_enabled and microsoft_enabled",
+      "no_keys_configured": "PASS - Both return false when no client keys configured"
+    },
+    "crontab_auth": {
+      "requires_authentication": "PASS - Returns 401 without auth",
+      "requires_admin_role": "PASS - Returns 403 for manager role"
+    },
+    "frontend_crontabs_tab": {
+      "scheduler_status_indicator": "PASS - Shows 'Scheduler actif — les tâches s'exécutent automatiquement' with green dot",
+      "nouvelle_tache_button": "PASS - Opens create dialog",
+      "task_type_selector": "PASS - Shows 'Scan SFTP' and 'Enregistrement historique prix' options",
+      "schedule_selector": "PASS - Shows frequency options (5min, 15min, 30min, hourly, etc.)",
+      "task_list": "PASS - Shows created tasks with name, schedule, type",
+      "last_run_display": "PASS - Shows 'Dernier: [timestamp]' after execution",
+      "status_badge": "PASS - Shows 'OK' (green) or 'Erreur' (red) badge",
+      "last_result_display": "PASS - Shows execution result details",
+      "run_button": "PASS - Play icon button triggers manual execution",
+      "toggle_checkbox": "PASS - Checkbox enables/disables task",
+      "delete_button": "PASS - Trash icon button deletes task"
+    },
+    "frontend_sso_tab": {
+      "google_sso_section": "PASS - Shows Google SSO with toggle and config fields",
+      "microsoft_sso_section": "PASS - Shows Microsoft SSO with toggle and config fields",
+      "save_button": "PASS - Sauvegarder button present"
+    }
+  }
+}
