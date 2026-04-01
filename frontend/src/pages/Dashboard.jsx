@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { Package, CookingPot, Gear, Truck, Calculator, TrendUp, TreeStructure, ChartPie, ArrowRight } from "@phosphor-icons/react";
+import { Package, CookingPot, Gear, Truck, Calculator, TrendUp, TreeStructure, ChartPie, ArrowRight, Warning, ArrowUp, ArrowDown } from "@phosphor-icons/react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area, LineChart, Line } from "recharts";
 
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
@@ -15,12 +15,16 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [allCosts, setAllCosts] = useState([]);
+  const [priceHistory, setPriceHistory] = useState([]);
+  const [priceAlerts, setPriceAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       axios.get(API + "/dashboard/stats").then(r => setStats(r.data)).catch(() => {}),
       axios.get(API + "/reports/all-costs").then(r => setAllCosts(r.data)).catch(() => {}),
+      axios.get(API + "/price-history?days=90").then(r => setPriceHistory(r.data)).catch(() => {}),
+      axios.get(API + "/price-history/alerts").then(r => setPriceAlerts(r.data)).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
 
@@ -56,6 +60,23 @@ export default function Dashboard() {
     prix_revient: c.cost_per_unit || 0,
     prix_vente: c.suggested_price || 0,
   }));
+
+  // Build price evolution chart data: group by date, one line per recipe
+  const evolutionData = (() => {
+    if (!priceHistory || priceHistory.length === 0) return { chartData: [], recipeNames: [] };
+    const byDate = {};
+    const recipeSet = new Set();
+    priceHistory.forEach(entry => {
+      const date = (entry.recorded_at || "").substring(0, 10);
+      if (!date) return;
+      const name = entry.recipe_name || "Inconnu";
+      recipeSet.add(name);
+      if (!byDate[date]) byDate[date] = { date };
+      byDate[date][name] = entry.cost_per_unit || 0;
+    });
+    const dates = Object.keys(byDate).sort();
+    return { chartData: dates.map(d => byDate[d]), recipeNames: [...recipeSet] };
+  })();
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
@@ -212,6 +233,84 @@ export default function Dashboard() {
                     <p className="font-mono font-bold text-zinc-900">{recipe.cost_per_unit.toFixed(2)} EUR</p>
                     <p className="text-xs font-mono text-green-600">{recipe.suggested_price.toFixed(2)} EUR vente</p>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Price Evolution & Alerts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Line Chart - Price Evolution */}
+        <div className="lg:col-span-2 bg-white border border-zinc-200 rounded-xl p-6" data-testid="price-evolution-chart">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-zinc-900 flex items-center gap-2">
+              <TrendUp size={20} className="text-[#002FA7]" /> Evolution des prix de revient (90j)
+            </h3>
+          </div>
+          {evolutionData.chartData.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-zinc-400">
+              <div className="text-center">
+                <TrendUp size={40} className="mx-auto mb-2 text-zinc-300" />
+                <p>Aucun historique de prix enregistre</p>
+                <p className="text-xs mt-1">Configurez une tache planifiee "Historique prix" dans Parametres</p>
+              </div>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={evolutionData.chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F4F4F5" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={v => { const d = new Date(v); return d.getDate() + "/" + (d.getMonth()+1); }} />
+                <YAxis tickFormatter={v => v.toFixed(1)} tick={{ fontSize: 11 }} />
+                <Tooltip
+                  labelFormatter={v => new Date(v).toLocaleDateString("fr-FR")}
+                  formatter={(v) => [v.toFixed(2) + " EUR", ""]}
+                  contentStyle={{ backgroundColor: '#fff', border: '1px solid #E4E4E7', borderRadius: '8px', fontSize: '12px' }}
+                />
+                <Legend wrapperStyle={{ fontSize: "11px" }} />
+                {evolutionData.recipeNames.map((name, i) => (
+                  <Line key={name} type="monotone" dataKey={name} stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                    strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Price Alerts */}
+        <div className="bg-white border border-zinc-200 rounded-xl p-6" data-testid="price-alerts-panel">
+          <h3 className="font-semibold text-zinc-900 flex items-center gap-2 mb-4">
+            <Warning size={20} className="text-amber-500" /> Alertes prix matieres
+          </h3>
+          {priceAlerts.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-zinc-400">
+              <div className="text-center">
+                <Warning size={40} className="mx-auto mb-2 text-zinc-300" />
+                <p>Aucune alerte</p>
+                <p className="text-xs mt-1">Les alertes apparaissent quand un prix varie au-dela du seuil</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[280px] overflow-y-auto">
+              {priceAlerts.map((alert, i) => (
+                <div key={i} className={`p-3 rounded-lg border ${alert.type === "hausse" ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`} data-testid={"price-alert-" + i}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {alert.type === "hausse"
+                        ? <ArrowUp size={16} className="text-red-600" weight="bold" />
+                        : <ArrowDown size={16} className="text-green-600" weight="bold" />
+                      }
+                      <span className="font-medium text-sm text-zinc-900">{alert.material_name}</span>
+                    </div>
+                    <span className={`text-sm font-mono font-bold ${alert.type === "hausse" ? "text-red-600" : "text-green-600"}`}>
+                      {alert.change_pct > 0 ? "+" : ""}{alert.change_pct}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    {alert.old_price.toFixed(2)} EUR &rarr; {alert.new_price.toFixed(2)} EUR
+                    {alert.supplier_name && <span> | {alert.supplier_name}</span>}
+                  </p>
                 </div>
               ))}
             </div>
