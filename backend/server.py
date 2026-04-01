@@ -2066,6 +2066,88 @@ async def get_dashboard_stats():
         "stock_alerts": stock_alerts
     }
 
+@api_router.get("/dashboard/admin-stats")
+async def get_admin_stats(admin: dict = Depends(require_admin)):
+    """Admin-only dashboard statistics"""
+    # Users by role
+    all_users = await db.users.find({}, {"_id": 0, "role": 1, "is_active": 1, "email": 1, "name": 1, "created_at": 1}).to_list(1000)
+    users_by_role = {}
+    active_count = 0
+    for u in all_users:
+        r = u.get("role", "operator")
+        users_by_role[r] = users_by_role.get(r, 0) + 1
+        if u.get("is_active", True):
+            active_count += 1
+
+    # Recent imports (last 10)
+    recent_imports = await db.import_logs.find({}, {"_id": 0}).sort("timestamp", -1).to_list(10)
+
+    # Import stats
+    total_imports = await db.import_logs.count_documents({})
+    success_imports = await db.import_logs.count_documents({"status": "success"})
+    error_imports = await db.import_logs.count_documents({"status": "error"})
+
+    # Recipes by category
+    recipes_pipeline = [
+        {"$group": {"_id": "$category_id", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    recipes_by_cat_raw = await db.recipes.aggregate(recipes_pipeline).to_list(100)
+    cat_ids = [r["_id"] for r in recipes_by_cat_raw if r["_id"]]
+    categories = {}
+    if cat_ids:
+        cats = await db.categories.find({"id": {"$in": cat_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
+        categories = {c["id"]: c["name"] for c in cats}
+    recipes_by_category = [
+        {"category": categories.get(r["_id"], "Non classees"), "count": r["count"]}
+        for r in recipes_by_cat_raw
+    ]
+
+    # Materials by category
+    materials_pipeline = [
+        {"$group": {"_id": "$category_id", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    materials_by_cat_raw = await db.raw_materials.aggregate(materials_pipeline).to_list(100)
+    materials_by_category = [
+        {"category": categories.get(r["_id"], "Non classees"), "count": r["count"]}
+        for r in materials_by_cat_raw
+    ]
+
+    # Crontab statuses
+    crontabs = await db.crontabs.find({}, {"_id": 0}).to_list(50)
+    crontab_summary = [
+        {"name": c.get("name", ""), "type": c.get("type", ""), "enabled": c.get("enabled", False),
+         "last_status": c.get("last_status", ""), "last_run": c.get("last_run", "")}
+        for c in crontabs
+    ]
+
+    # Sites count
+    total_sites = await db.sites.count_documents({})
+
+    # Stock alerts details (top 5)
+    low_stock = await db.raw_materials.find(
+        {"$expr": {"$lte": ["$stock_quantity", "$stock_alert_threshold"]}, "stock_alert_threshold": {"$gt": 0}},
+        {"_id": 0, "name": 1, "stock_quantity": 1, "stock_alert_threshold": 1, "unit": 1}
+    ).limit(5).to_list(5)
+
+    return {
+        "total_users": len(all_users),
+        "active_users": active_count,
+        "users_by_role": users_by_role,
+        "total_imports": total_imports,
+        "success_imports": success_imports,
+        "error_imports": error_imports,
+        "recent_imports": recent_imports,
+        "recipes_by_category": recipes_by_category,
+        "materials_by_category": materials_by_category,
+        "crontab_summary": crontab_summary,
+        "total_sites": total_sites,
+        "low_stock_items": low_stock,
+    }
+
+
+
 # ================= ROOT =================
 
 @api_router.get("/")

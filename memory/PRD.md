@@ -88,5 +88,11 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - [x] Generation PDF et DOCX via generate_docs.py
 - [x] 3 documents disponibles : Guide VPS, Documentation Metier, Modele de Donnees
 
+### Phase 13 - Tableau de bord Administration (Complete - 1 Avril 2026)
+- [x] Endpoint /api/dashboard/admin-stats (admin only)
+- [x] Section "Administration" dans Dashboard visible uniquement pour admins
+- [x] 4 KPIs: Utilisateurs (par role), Imports (succes/erreur), Sites, Alertes stock
+- [x] 3 panneaux: Recettes par categorie (BarChart), Derniers imports, Taches planifiees
+
 ## Backlog
 - P2: Champ site_id sur recettes et matieres avec filtre par site

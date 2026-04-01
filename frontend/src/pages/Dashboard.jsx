@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { Package, CookingPot, Gear, Truck, Calculator, TrendUp, TreeStructure, ChartPie, ArrowRight, Warning, ArrowUp, ArrowDown } from "@phosphor-icons/react";
+import { Package, CookingPot, Gear, Truck, Calculator, TrendUp, TreeStructure, ChartPie, ArrowRight, Warning, ArrowUp, ArrowDown, Users, ClockCounterClockwise, CheckCircle, XCircle, Database, MapPin, ShieldCheck } from "@phosphor-icons/react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area, LineChart, Line } from "recharts";
@@ -12,21 +12,26 @@ const CHART_COLORS = ["#002FA7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#E
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [stats, setStats] = useState(null);
   const [allCosts, setAllCosts] = useState([]);
   const [priceHistory, setPriceHistory] = useState([]);
   const [priceAlerts, setPriceAlerts] = useState([]);
+  const [adminStats, setAdminStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
+    const fetches = [
       axios.get(API + "/dashboard/stats").then(r => setStats(r.data)).catch(() => {}),
       axios.get(API + "/reports/all-costs").then(r => setAllCosts(r.data)).catch(() => {}),
       axios.get(API + "/price-history?days=90").then(r => setPriceHistory(r.data)).catch(() => {}),
       axios.get(API + "/price-history/alerts").then(r => setPriceAlerts(r.data)).catch(() => {}),
-    ]).finally(() => setLoading(false));
-  }, []);
+    ];
+    if (user?.role === "admin") {
+      fetches.push(axios.get(API + "/dashboard/admin-stats").then(r => setAdminStats(r.data)).catch(() => {}));
+    }
+    Promise.all(fetches).finally(() => setLoading(false));
+  }, [user?.role]);
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="text-zinc-500">Chargement...</div></div>;
 
@@ -317,6 +322,140 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Admin Section */}
+      {isAdmin && adminStats && (
+        <div className="mb-6" data-testid="admin-section">
+          <div className="flex items-center gap-2 mb-4">
+            <ShieldCheck size={22} className="text-[#002FA7]" weight="duotone" />
+            <h2 className="text-lg font-semibold text-zinc-900">Administration</h2>
+          </div>
+
+          {/* Admin KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+            <div className="bg-white border border-zinc-200 rounded-xl p-4" data-testid="admin-users-card">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-blue-50 rounded-lg"><Users size={18} className="text-blue-600" /></div>
+                <span className="text-sm font-medium text-zinc-600">Utilisateurs</span>
+              </div>
+              <p className="text-2xl font-bold text-zinc-900 font-mono">{adminStats.active_users}<span className="text-sm font-normal text-zinc-400">/{adminStats.total_users}</span></p>
+              <div className="flex gap-3 mt-2">
+                {Object.entries(adminStats.users_by_role || {}).map(([role, count]) => (
+                  <span key={role} className="text-xs text-zinc-500">{role}: <strong>{count}</strong></span>
+                ))}
+              </div>
+            </div>
+            <div className="bg-white border border-zinc-200 rounded-xl p-4" data-testid="admin-imports-card">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-emerald-50 rounded-lg"><Database size={18} className="text-emerald-600" /></div>
+                <span className="text-sm font-medium text-zinc-600">Imports</span>
+              </div>
+              <p className="text-2xl font-bold text-zinc-900 font-mono">{adminStats.total_imports}</p>
+              <div className="flex gap-3 mt-2">
+                <span className="text-xs text-green-600 flex items-center gap-1"><CheckCircle size={12} /> {adminStats.success_imports}</span>
+                <span className="text-xs text-red-500 flex items-center gap-1"><XCircle size={12} /> {adminStats.error_imports}</span>
+              </div>
+            </div>
+            <div className="bg-white border border-zinc-200 rounded-xl p-4" data-testid="admin-sites-card">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-amber-50 rounded-lg"><MapPin size={18} className="text-amber-600" /></div>
+                <span className="text-sm font-medium text-zinc-600">Sites</span>
+              </div>
+              <p className="text-2xl font-bold text-zinc-900 font-mono">{adminStats.total_sites}</p>
+            </div>
+            <div className="bg-white border border-zinc-200 rounded-xl p-4" data-testid="admin-stock-alerts-card">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-red-50 rounded-lg"><Warning size={18} className="text-red-500" /></div>
+                <span className="text-sm font-medium text-zinc-600">Alertes stock</span>
+              </div>
+              <p className="text-2xl font-bold text-zinc-900 font-mono">{adminStats.low_stock_items?.length || 0}</p>
+              {adminStats.low_stock_items?.length > 0 && (
+                <div className="mt-2 space-y-0.5">
+                  {adminStats.low_stock_items.slice(0, 3).map((item, i) => (
+                    <p key={i} className="text-xs text-red-600 truncate">{item.name}: {item.stock_quantity} {item.unit}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Admin Details Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* Recipes by Category */}
+            <div className="bg-white border border-zinc-200 rounded-xl p-5" data-testid="admin-recipes-by-cat">
+              <h3 className="font-semibold text-zinc-900 text-sm mb-3">Recettes par categorie</h3>
+              {(adminStats.recipes_by_category || []).length === 0 ? (
+                <p className="text-xs text-zinc-400 py-4 text-center">Aucune donnee</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={adminStats.recipes_by_category} layout="vertical" margin={{ left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F4F4F5" />
+                    <XAxis type="number" tick={{ fontSize: 10 }} />
+                    <YAxis dataKey="category" type="category" tick={{ fontSize: 10 }} width={90} />
+                    <Tooltip formatter={v => [v, "Recettes"]} />
+                    <Bar dataKey="count" fill="#002FA7" radius={[0, 4, 4, 0]} barSize={16} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Recent Imports */}
+            <div className="bg-white border border-zinc-200 rounded-xl p-5" data-testid="admin-recent-imports">
+              <h3 className="font-semibold text-zinc-900 text-sm mb-3 flex items-center gap-2">
+                <ClockCounterClockwise size={16} className="text-zinc-500" /> Derniers imports
+              </h3>
+              {(adminStats.recent_imports || []).length === 0 ? (
+                <p className="text-xs text-zinc-400 py-4 text-center">Aucun import</p>
+              ) : (
+                <div className="space-y-2 max-h-[180px] overflow-y-auto">
+                  {adminStats.recent_imports.slice(0, 6).map((imp, i) => (
+                    <div key={i} className="flex items-center justify-between py-1.5 border-b border-zinc-50 last:border-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {imp.status === "success"
+                          ? <CheckCircle size={14} className="text-green-500 flex-shrink-0" />
+                          : <XCircle size={14} className="text-red-500 flex-shrink-0" />
+                        }
+                        <span className="text-xs text-zinc-700 truncate">{imp.filename || imp.type}</span>
+                      </div>
+                      <span className="text-xs text-zinc-400 flex-shrink-0 ml-2">
+                        {imp.timestamp ? new Date(imp.timestamp).toLocaleDateString("fr-FR") : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Crontab Status */}
+            <div className="bg-white border border-zinc-200 rounded-xl p-5" data-testid="admin-crontab-status">
+              <h3 className="font-semibold text-zinc-900 text-sm mb-3 flex items-center gap-2">
+                <Gear size={16} className="text-zinc-500" /> Taches planifiees
+              </h3>
+              {(adminStats.crontab_summary || []).length === 0 ? (
+                <p className="text-xs text-zinc-400 py-4 text-center">Aucune tache configuree</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {adminStats.crontab_summary.map((c, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${c.enabled ? "bg-green-500" : "bg-zinc-300"}`} />
+                        <span className="text-xs text-zinc-700 truncate">{c.name}</span>
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                        c.last_status === "success" ? "bg-green-50 text-green-700" :
+                        c.last_status === "error" ? "bg-red-50 text-red-700" :
+                        "bg-zinc-50 text-zinc-500"
+                      }`}>
+                        {c.last_status || "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="quick-actions">
