@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { CloudArrowUp, FolderOpen, Clock, CheckCircle, XCircle, ArrowClockwise, UploadSimple, FileText, Plugs } from "@phosphor-icons/react";
+import { CloudArrowUp, FolderOpen, Clock, CheckCircle, XCircle, ArrowClockwise, UploadSimple, FileText, Plugs, DownloadSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,14 @@ export default function ImportCenter() {
   const [scanning, setScanning] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [importType, setImportType] = useState("materials");
+
+  const IMPORT_TYPES = {
+    materials:   { label: "Matieres premieres",       template: "/materials/csv-template",      templateName: "template_matieres.csv" },
+    recipes:     { label: "Recettes simples",          template: "/recipes/csv-template",        templateName: "template_recettes.csv" },
+    bom:         { label: "Arbre de fabrication (BOM)", template: "/recipes/bom-csv-template",   templateName: "template_bom.csv" },
+    suppliers:   { label: "Fournisseurs",              template: "/suppliers/csv-template",      templateName: "template_fournisseurs.csv" },
+    categories:  { label: "Categories",                template: "/categories/csv-template",     templateName: "template_categories.csv" },
+  };
 
   useEffect(() => { fetchStatus(); fetchLogs(); }, []);
 
@@ -113,13 +121,19 @@ export default function ImportCenter() {
                   <Select value={importType} onValueChange={setImportType}>
                     <SelectTrigger data-testid="import-type-select"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="materials">Matieres premieres</SelectItem>
-                      <SelectItem value="recipes">Recettes simples</SelectItem>
-                      <SelectItem value="bom">Arbre de fabrication (BOM)</SelectItem>
-                      <SelectItem value="suppliers">Fournisseurs</SelectItem>
-                      <SelectItem value="categories">Categories</SelectItem>
+                      {Object.entries(IMPORT_TYPES).map(([key, cfg]) => (
+                        <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  <a
+                    href={API + IMPORT_TYPES[importType].template}
+                    download={IMPORT_TYPES[importType].templateName}
+                    className="inline-flex items-center gap-1.5 text-xs text-[#002FA7] hover:underline mt-1"
+                    data-testid="download-template-link"
+                  >
+                    <DownloadSimple size={14} /> Telecharger le modele {IMPORT_TYPES[importType].templateName}
+                  </a>
                 </div>
                 <div className="border-2 border-dashed border-zinc-300 rounded-lg p-6 text-center">
                   <input ref={fileInputRef} type="file" accept=".csv" onChange={handleAutoUpload} className="hidden" data-testid="auto-import-file-input" />
