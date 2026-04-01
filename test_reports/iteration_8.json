@@ -1,0 +1,80 @@
+{
+  "summary": "Iteration 8 testing complete. All 12 backend tests passed. All frontend UI tests passed. Tested: Suppliers CRUD with 'code' field, Materials with 'code_article' field, Import Center History tab with /api/import/logs endpoint, RecipeDetail live simulation feature.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration8_features.py",
+    "/app/test_reports/pytest/pytest_results_iter8.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration8_features.py"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 tests passed)",
+    "frontend": "100% (all UI tests passed)"
+  },
+  "test_credentials": {
+    "admin": {"email": "admin@example.com", "password": "Admin123!", "role": "admin"},
+    "manager": {"email": "manager@example.com", "password": "Manager123!", "role": "manager"},
+    "operator": {"email": "operator@example.com", "password": "Operator123!", "role": "operator"}
+  },
+  "seed_data_creation": "Created test supplier 'Test Supplier UI' with code 'FRN-UI-001', test material 'Test Material UI' with code_article 'MAT-UI-001'",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All iteration 8 features working correctly. Suppliers page has 'Code' column in table and 'code' input in form (NO delivery_time or minimum_order fields). Materials page has 'Code' column for code_article. Import Center is embedded in Settings page under 'Import' tab - History tab fetches from /api/import/logs and displays logs from MongoDB. RecipeDetail has live simulation mode with 'Simuler' button that enables editable inputs for quantity/price/freinte, real-time cost recalculation, and 'Réinitialiser' reset button.",
+  "features_tested": {
+    "suppliers_code_field": {
+      "backend_create": "PASS - POST /api/suppliers with code field works",
+      "backend_get": "PASS - GET /api/suppliers returns code field",
+      "backend_update": "PASS - PUT /api/suppliers/{id} updates code field",
+      "backend_no_extra_fields": "PASS - No delivery_time or minimum_order fields",
+      "frontend_table_column": "PASS - 'Code' column visible in suppliers table",
+      "frontend_form_input": "PASS - 'Code' input field in supplier form",
+      "frontend_no_extra_fields": "PASS - No delivery_time or minimum_order in form"
+    },
+    "materials_code_article": {
+      "backend_create": "PASS - POST /api/materials with code_article works",
+      "backend_get": "PASS - GET /api/materials returns code_article field",
+      "backend_update": "PASS - PUT /api/materials/{id} updates code_article",
+      "frontend_table_column": "PASS - 'Code' column visible in materials table",
+      "frontend_form_input": "PASS - 'code_article' input field in material form"
+    },
+    "import_logs_endpoint": {
+      "GET /api/import/logs": "PASS - Returns list of import logs from MongoDB",
+      "GET /api/import/logs?limit=10": "PASS - Respects limit parameter",
+      "import_creates_log": "PASS - Importing CSV creates log entry in DB"
+    },
+    "import_center_history_tab": {
+      "location": "Settings page > Import tab > Historique sub-tab",
+      "logs_list": "PASS - Displays import logs from /api/import/logs",
+      "refresh_button": "PASS - 'Actualiser' button to refresh logs"
+    },
+    "recipe_detail_live_simulation": {
+      "simuler_button": "PASS - 'Simuler' button visible on recipe detail page",
+      "simulation_mode_banner": "PASS - Yellow banner shows 'Mode simulation active'",
+      "editable_quantity": "PASS - Quantity input editable in simulation mode",
+      "editable_price": "PASS - Price input editable in simulation mode",
+      "editable_freinte": "PASS - Freinte input editable in simulation mode",
+      "editable_labor_hours": "PASS - Labor hours editable in simulation mode",
+      "editable_labor_rate": "PASS - Labor rate editable in simulation mode",
+      "real_time_recalculation": "PASS - Costs recalculate in real-time when values change",
+      "amber_highlight": "PASS - Modified rows highlighted in amber",
+      "reset_button": "PASS - 'Réinitialiser' button resets values to original",
+      "exit_simulation": "PASS - 'Quitter simulation' exits simulation mode",
+      "no_db_mutation": "PASS - Changes are temporary, not saved to database"
+    },
+    "login_flow": {
+      "admin_login": "PASS - Login with admin@example.com / Admin123! works",
+      "auth_me": "PASS - /api/auth/me returns user info after login"
+    }
+  }
+}

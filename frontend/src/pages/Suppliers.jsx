@@ -32,7 +32,7 @@ const Suppliers = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [formData, setFormData] = useState({
-    name: "", contact: "", email: "", phone: "", address: ""
+    name: "", code: "", contact: "", email: "", phone: "", address: ""
   });
 
   useEffect(() => { fetchSuppliers(); }, []);
@@ -79,7 +79,7 @@ const Suppliers = () => {
 
   const resetForm = () => {
     setSelectedSupplier(null);
-    setFormData({ name: "", contact: "", email: "", phone: "", address: "" });
+    setFormData({ name: "", code: "", contact: "", email: "", phone: "", address: "" });
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="text-zinc-500">Chargement...</div></div>;
@@ -107,6 +107,7 @@ const Suppliers = () => {
           <table className="data-table">
             <thead>
               <tr>
+                <th>Code</th>
                 <th>Nom</th>
                 <th>Contact</th>
                 <th>Email</th>
@@ -117,6 +118,7 @@ const Suppliers = () => {
             <tbody>
               {suppliers.map((supplier, index) => (
                 <tr key={supplier.id} data-testid={`supplier-row-${index}`}>
+                  <td className="font-mono text-sm text-zinc-500">{supplier.code || "-"}</td>
                   <td className="font-medium">{supplier.name}</td>
                   <td>{supplier.contact || "-"}</td>
                   <td>{supplier.email || "-"}</td>
@@ -145,7 +147,10 @@ const Suppliers = () => {
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="space-y-4 py-4">
-              <div><Label>Nom *</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} required /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><Label>Nom *</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} required data-testid="supplier-name-input" /></div>
+                <div><Label>Code</Label><Input value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value})} placeholder="Ex: FRN-001" data-testid="supplier-code-input" /></div>
+              </div>
               <div><Label>Contact</Label><Input value={formData.contact} onChange={(e) => setFormData({...formData, contact: e.target.value})} /></div>
               <div><Label>Email</Label><Input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} /></div>
               <div><Label>Téléphone</Label><Input value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} /></div>

@@ -15,12 +15,13 @@ const API = process.env.REACT_APP_BACKEND_URL + "/api";
 export default function ImportCenter() {
   const fileInputRef = useRef(null);
   const [importStatus, setImportStatus] = useState(null);
+  const [importLogs, setImportLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [importType, setImportType] = useState("materials");
 
-  useEffect(() => { fetchStatus(); }, []);
+  useEffect(() => { fetchStatus(); fetchLogs(); }, []);
 
   const fetchStatus = async () => {
     try {
@@ -28,6 +29,13 @@ export default function ImportCenter() {
       setImportStatus(res.data);
     } catch { toast.error("Erreur"); }
     finally { setLoading(false); }
+  };
+
+  const fetchLogs = async () => {
+    try {
+      const res = await axios.get(API + "/import/logs?limit=50");
+      setImportLogs(res.data);
+    } catch {}
   };
 
   const handleSftpScan = async () => {
@@ -40,6 +48,7 @@ export default function ImportCenter() {
         toast.success(res.data.files_scanned + " fichier(s) traite(s)");
       }
       fetchStatus();
+      fetchLogs();
     } catch { toast.error("Erreur SFTP scan"); }
     finally { setScanning(false); }
   };
@@ -58,6 +67,7 @@ export default function ImportCenter() {
         toast.success(res.data.imported_count + " element(s) importe(s)");
       }
       fetchStatus();
+      fetchLogs();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erreur import");
     } finally {
@@ -227,36 +237,44 @@ export default function ImportCenter() {
         {/* History Tab */}
         <TabsContent value="history">
           <div className="bg-white border border-zinc-200 rounded-lg p-6">
-            <h3 className="font-semibold text-zinc-900 mb-4 flex items-center gap-2">
-              <Clock size={20} className="text-[#002FA7]" /> Historique des imports
-            </h3>
-            {(!importStatus?.recent_imports || importStatus.recent_imports.length === 0) ? (
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-zinc-900 flex items-center gap-2">
+                <Clock size={20} className="text-[#002FA7]" /> Historique des imports
+              </h3>
+              <Button size="sm" variant="outline" onClick={fetchLogs} data-testid="refresh-logs-btn">
+                <ArrowClockwise size={14} className="mr-1" /> Actualiser
+              </Button>
+            </div>
+            {importLogs.length === 0 ? (
               <div className="text-center py-8 text-zinc-500">
                 <Clock size={40} className="mx-auto mb-3 text-zinc-300" />
-                <p>Aucun import recent</p>
+                <p>Aucun import enregistré</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {[...importStatus.recent_imports].reverse().map((log, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 border border-zinc-100 rounded-lg hover:bg-zinc-50" data-testid={"import-log-" + idx}>
+              <div className="space-y-2" data-testid="import-logs-list">
+                {importLogs.map((log, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3 border border-zinc-100 rounded-lg hover:bg-zinc-50" data-testid={`import-log-${idx}`}>
                     <div className="flex items-center gap-3">
-                      {log.result?.success ? (
+                      {log.status === "success" || log.result?.success ? (
                         <CheckCircle size={20} className="text-[#10B981] shrink-0" />
                       ) : (
                         <XCircle size={20} className="text-red-500 shrink-0" />
                       )}
                       <div>
-                        <p className="font-medium text-sm text-zinc-900">{log.filename}</p>
+                        <p className="font-medium text-sm text-zinc-900">{log.filename || "Import"}</p>
                         <p className="text-xs text-zinc-500">
-                          {log.import_type} via {log.source} - {new Date(log.timestamp).toLocaleString('fr-FR')}
+                          {log.type || log.import_type || "-"} {log.source ? `via ${log.source}` : ""} — {log.user || ""} — {log.timestamp ? new Date(log.timestamp).toLocaleString('fr-FR') : ""}
                         </p>
+                        {log.error_details && (
+                          <p className="text-xs text-red-500 mt-0.5">{log.error_details}</p>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="font-mono text-sm font-semibold text-zinc-900">
-                        {log.result?.imported_count || 0} importe(s)
+                        {log.result?.imported_count ?? log.imported_count ?? 0} importé(s)
                       </p>
-                      {log.result?.errors?.length > 0 && (
+                      {(log.result?.errors?.length > 0) && (
                         <p className="text-xs text-red-500">{log.result.errors.length} erreur(s)</p>
                       )}
                     </div>
