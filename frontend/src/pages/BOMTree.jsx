@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { TreeStructure, CookingPot, Eye, UploadSimple, DownloadSimple, FileText, CaretRight, CaretDown, Package, Cube } from "@phosphor-icons/react";
+import { TreeStructure, CookingPot, Eye, UploadSimple, DownloadSimple, FileText, CaretRight, CaretDown, Package, Cube, Calculator } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +52,8 @@ export default function BOMTree() {
   const [importing, setImporting] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState({});
+  const [costPopup, setCostPopup] = useState(null);
+  const [costLoading, setCostLoading] = useState(false);
 
   useEffect(() => { fetchRecipes(); }, []);
 
@@ -70,6 +72,19 @@ export default function BOMTree() {
 
   const toggle = (id) => {
     setExpandedIds(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const openCostPopup = async (recipeId) => {
+    setCostLoading(true);
+    setCostPopup(null);
+    try {
+      const res = await axios.get(API + "/recipes/" + recipeId + "/cost");
+      setCostPopup(res.data);
+    } catch {
+      toast.error("Erreur de calcul");
+    } finally {
+      setCostLoading(false);
+    }
   };
 
   const handleFileUpload = async (event) => {
@@ -147,7 +162,7 @@ export default function BOMTree() {
           <span className={"text-xs ml-auto shrink-0 " + (isRoot ? "text-white/60" : "text-zinc-400")}>{summary}</span>
 
           <Button size="sm" variant={isRoot ? "secondary" : "outline"} className="h-6 text-[11px] px-2 shrink-0 ml-1"
-            onClick={(e) => { e.stopPropagation(); navigate("/recipes/" + r.id); }}
+            onClick={(e) => { e.stopPropagation(); openCostPopup(r.id); }}
             data-testid={"bom-detail-" + r.id}
           >
             <Eye size={12} className="mr-1" /> Detail
@@ -299,6 +314,123 @@ export default function BOMTree() {
             </div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>Fermer</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cost Summary Popup */}
+      <Dialog open={costPopup !== null || costLoading} onOpenChange={() => setCostPopup(null)}>
+        <DialogContent className="sm:max-w-[600px]" data-testid="cost-popup">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calculator size={20} className="text-[#002FA7]" />
+              {costPopup ? costPopup.recipe_name : "Chargement..."}
+            </DialogTitle>
+          </DialogHeader>
+          {costLoading ? (
+            <div className="py-8 text-center text-zinc-500">Calcul en cours...</div>
+          ) : costPopup && (
+            <div className="py-4 space-y-4">
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-center">
+                  <p className="text-[10px] uppercase text-zinc-500 font-medium tracking-wider">Prix de revient</p>
+                  <p className="text-xl font-bold text-zinc-900 mt-1">{costPopup.cost_per_unit.toFixed(2)} <span className="text-sm font-normal text-zinc-500">EUR/{costPopup.output_unit}</span></p>
+                </div>
+                <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-center">
+                  <p className="text-[10px] uppercase text-zinc-500 font-medium tracking-wider">Cout total</p>
+                  <p className="text-xl font-bold text-zinc-900 mt-1">{costPopup.total_cost.toFixed(2)} <span className="text-sm font-normal text-zinc-500">EUR</span></p>
+                </div>
+                <div className="bg-[#002FA7]/5 border border-[#002FA7]/20 rounded-lg p-3 text-center">
+                  <p className="text-[10px] uppercase text-[#002FA7] font-medium tracking-wider">Prix de vente</p>
+                  <p className="text-xl font-bold text-[#002FA7] mt-1">{costPopup.suggested_price.toFixed(2)} <span className="text-sm font-normal">EUR</span></p>
+                  <p className="text-[10px] text-zinc-500">Marge {costPopup.target_margin}%</p>
+                </div>
+              </div>
+
+              {/* Cost breakdown */}
+              <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden">
+                <div className="grid grid-cols-4 text-xs font-medium text-zinc-500 uppercase tracking-wider bg-zinc-50 px-4 py-2 border-b">
+                  <span>Poste</span><span className="text-right">Montant</span><span className="text-right">Freinte</span><span className="text-right">% du total</span>
+                </div>
+                <div className="divide-y divide-zinc-100">
+                  <div className="grid grid-cols-4 px-4 py-2.5 text-sm">
+                    <span className="flex items-center gap-2"><Package size={14} className="text-zinc-400" /> Matieres</span>
+                    <span className="text-right font-mono">{costPopup.total_material_cost.toFixed(2)} EUR</span>
+                    <span className="text-right font-mono text-amber-600">{costPopup.total_freinte_cost.toFixed(2)} EUR</span>
+                    <span className="text-right font-mono">{costPopup.total_cost > 0 ? ((costPopup.total_material_cost / costPopup.total_cost) * 100).toFixed(0) : 0}%</span>
+                  </div>
+                  <div className="grid grid-cols-4 px-4 py-2.5 text-sm">
+                    <span className="flex items-center gap-2"><span className="text-xs font-bold text-blue-500">MO</span> Main d'oeuvre</span>
+                    <span className="text-right font-mono">{costPopup.total_labor_cost.toFixed(2)} EUR</span>
+                    <span className="text-right text-zinc-300">-</span>
+                    <span className="text-right font-mono">{costPopup.total_cost > 0 ? ((costPopup.total_labor_cost / costPopup.total_cost) * 100).toFixed(0) : 0}%</span>
+                  </div>
+                  <div className="grid grid-cols-4 px-4 py-2.5 text-sm">
+                    <span className="flex items-center gap-2"><Cube size={14} className="text-zinc-400" /> Frais generaux</span>
+                    <span className="text-right font-mono">{costPopup.total_overhead_cost.toFixed(2)} EUR</span>
+                    <span className="text-right text-zinc-300">-</span>
+                    <span className="text-right font-mono">{costPopup.total_cost > 0 ? ((costPopup.total_overhead_cost / costPopup.total_cost) * 100).toFixed(0) : 0}%</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 px-4 py-2.5 text-sm font-bold bg-zinc-50 border-t">
+                  <span>Total</span>
+                  <span className="text-right font-mono">{costPopup.total_cost.toFixed(2)} EUR</span>
+                  <span className="text-right font-mono text-amber-600">{costPopup.total_freinte_cost.toFixed(2)} EUR</span>
+                  <span className="text-right">100%</span>
+                </div>
+              </div>
+
+              {/* Detail lists */}
+              {costPopup.material_details && costPopup.material_details.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Detail matieres ({costPopup.material_details.length})</p>
+                  <div className="space-y-1">
+                    {costPopup.material_details.map((m, i) => (
+                      <div key={i} className="flex justify-between text-sm px-3 py-1.5 bg-zinc-50 rounded" data-testid={"cost-mat-" + i}>
+                        <span className="text-zinc-700">{m.name} <span className="text-zinc-400 text-xs">{m.quantity} {m.unit}</span></span>
+                        <span className="font-mono text-zinc-900">{(m.total_cost || 0).toFixed(2)} EUR {(m.freinte_cost || 0) > 0 && <span className="text-amber-500 text-xs">(+{(m.freinte_cost).toFixed(2)} freinte)</span>}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {costPopup.sub_recipe_details && costPopup.sub_recipe_details.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Sous-recettes ({costPopup.sub_recipe_details.length})</p>
+                  <div className="space-y-1">
+                    {costPopup.sub_recipe_details.map((s, i) => (
+                      <div key={i} className="flex justify-between text-sm px-3 py-1.5 bg-amber-50 rounded" data-testid={"cost-sub-" + i}>
+                        <span className="text-zinc-700">{s.name} <span className="text-zinc-400 text-xs">{s.quantity} {s.unit}</span></span>
+                        <span className="font-mono text-zinc-900">{(s.total_cost || 0).toFixed(2)} EUR</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {costPopup.labor_details && costPopup.labor_details.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Main d'oeuvre ({costPopup.labor_details.length})</p>
+                  <div className="space-y-1">
+                    {costPopup.labor_details.map((l, i) => (
+                      <div key={i} className="flex justify-between text-sm px-3 py-1.5 bg-blue-50 rounded" data-testid={"cost-lab-" + i}>
+                        <span className="text-zinc-700">{l.description} <span className="text-zinc-400 text-xs">{l.hours}h x {l.hourly_rate} EUR/h</span></span>
+                        <span className="font-mono text-zinc-900">{(l.total_cost || 0).toFixed(2)} EUR</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="text-center text-xs text-zinc-400 pt-2">
+                Production : {costPopup.output_quantity} {costPopup.output_unit}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCostPopup(null)}>Fermer</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
