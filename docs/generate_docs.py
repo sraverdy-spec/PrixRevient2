@@ -349,6 +349,7 @@ if __name__ == "__main__":
     files = [
         ("GUIDE_MISE_A_JOUR_VPS", "Guide de Mise à Jour VPS"),
         ("DOCUMENTATION_METIER", "Documentation Métier"),
+        ("MODELE_DONNEES", "Modèle de Données"),
     ]
     
     for base, title in files:

@@ -83,5 +83,10 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - price_history: {id, recipe_id, recipe_name, supplier_name, version, cost_per_unit, total_cost, recorded_at}
 - price_history_materials: {id, material_id, material_name, unit_price, supplier_name, recorded_at}
 
+### Phase 12 - Documentation technique (Complete - 1 Avril 2026)
+- [x] MODELE_DONNEES.md : schema complet des 14 collections MongoDB
+- [x] Generation PDF et DOCX via generate_docs.py
+- [x] 3 documents disponibles : Guide VPS, Documentation Metier, Modele de Donnees
+
 ## Backlog
 - P2: Champ site_id sur recettes et matieres avec filtre par site
