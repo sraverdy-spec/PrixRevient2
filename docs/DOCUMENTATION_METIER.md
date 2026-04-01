@@ -525,6 +525,17 @@ dont le prix a varie au-dela du seuil configure (defaut : 10%).
 | Fleche verte vers le bas | Baisse de prix |
 | Pourcentage | Amplitude de la variation |
 
+## 9.6 Resume des couts (Arbre de fabrication)
+
+Dans l'arbre de fabrication, le bouton **"Detail"** sur chaque recette
+ouvre un popup avec le resume complet des couts :
+
+- Prix de revient unitaire, cout total, prix de vente conseille
+- Repartition par poste (matieres, main d'oeuvre, frais generaux)
+  avec pourcentage du total et cout de la freinte
+- Detail de chaque matiere premiere, sous-recette et poste de MO
+- Quantite de production
+
 ---
 
 # 10. Glossaire

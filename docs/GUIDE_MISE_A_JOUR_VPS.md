@@ -230,3 +230,69 @@ sudo systemctl start prixrevient-backend
 | Mise a jour applicative | A chaque livraison Emergent |
 | Renouvellement SSL | Automatique (Certbot cron) |
 | Mise a jour OS | Mensuelle (`apt update && apt upgrade`) |
+
+---
+
+# Installation sur serveur interne Ubuntu
+
+Pour installer PrixRevient sur un nouveau serveur Ubuntu interne,
+utilisez le script `install-interne.sh` inclus dans le ZIP de deploiement.
+
+## Pre-requis serveur
+
+- Ubuntu 20.04, 22.04 ou 24.04 LTS
+- 2 Go RAM minimum
+- 10 Go espace disque
+- Acces root (sudo)
+- Reseau interne accessible depuis les postes utilisateurs
+
+## Procedure
+
+```bash
+# 1. Copier et extraire le ZIP sur le serveur
+scp prixrevient-deploy.zip user@serveur:/tmp/
+ssh user@serveur
+cd /tmp && unzip prixrevient-deploy.zip -d prixrevient-install
+
+# 2. Lancer l'installation
+cd /tmp/prixrevient-install
+sudo bash install-interne.sh
+```
+
+Le script pose les questions suivantes :
+- **URL d'acces** : http://192.168.x.x ou https://calculprix.local
+- **Email admin** : adresse email du compte administrateur
+- **Mot de passe admin** : mot de passe initial
+- **URL MongoDB** : laisser par defaut si MongoDB local
+
+## Ce que le script installe automatiquement
+
+1. Pre-requis (Python, build-essential)
+2. Node.js 20 LTS + Yarn
+3. MongoDB 7
+4. Backend Python (venv + dependances)
+5. Frontend React (build de production)
+6. Service systemd (demarrage automatique)
+7. Nginx (reverse proxy)
+8. SSL Let's Encrypt (optionnel)
+9. Backup automatique quotidien
+10. Script de mise a jour
+
+## Rapport de verification
+
+A la fin de l'installation, un rapport complet est affiche et sauvegarde
+dans `/opt/prixrevient/rapport_installation.txt`. Il verifie :
+
+- Etat des services (MongoDB, Backend, Nginx)
+- Reponses API (authentification, dashboard)
+- Presence du build frontend
+- Configuration (URL, base de donnees)
+
+## Problemes connus et solutions
+
+| Probleme | Solution |
+|----------|----------|
+| numpy/pandas incompatible | Le script ajuste automatiquement pour Python 3.10 |
+| Network Error au login | Verifier REACT_APP_BACKEND_URL dans /opt/prixrevient/frontend/.env |
+| Mot de passe admin incorrect | Reinitialiser via le script dans la doc |
+| MongoDB ne demarre pas | Verifier /var/log/mongodb/mongod.log |
