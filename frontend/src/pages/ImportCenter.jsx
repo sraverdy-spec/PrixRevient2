@@ -209,38 +209,53 @@ export default function ImportCenter() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-lg">
                     <FileText size={18} className="text-[#002FA7] shrink-0" />
-                    <div>
+                    <div className="flex-1">
                       <p className="font-mono text-sm font-medium">materials_*.csv</p>
                       <p className="text-xs text-zinc-500">Import de matieres premieres</p>
                     </div>
+                    <a href={API + "/materials/csv-template"} download className="inline-flex items-center gap-1 text-xs text-[#002FA7] hover:underline border border-[#002FA7]/20 rounded px-2 py-1 bg-white shrink-0" data-testid="sftp-template-materials">
+                      <DownloadSimple size={12} /> Modele
+                    </a>
                   </div>
                   <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-lg">
                     <FileText size={18} className="text-[#10B981] shrink-0" />
-                    <div>
+                    <div className="flex-1">
                       <p className="font-mono text-sm font-medium">recettes_*.csv / recipes_*.csv</p>
                       <p className="text-xs text-zinc-500">Import de recettes simples</p>
                     </div>
+                    <a href={API + "/recipes/csv-template"} download className="inline-flex items-center gap-1 text-xs text-[#10B981] hover:underline border border-[#10B981]/20 rounded px-2 py-1 bg-white shrink-0" data-testid="sftp-template-recipes">
+                      <DownloadSimple size={12} /> Modele
+                    </a>
                   </div>
                   <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-lg">
                     <FileText size={18} className="text-amber-500 shrink-0" />
-                    <div>
+                    <div className="flex-1">
                       <p className="font-mono text-sm font-medium">bom_*.csv / arbre_*.csv</p>
                       <p className="text-xs text-zinc-500">Import d'arbre de fabrication avec sous-recettes</p>
                     </div>
+                    <a href={API + "/recipes/bom-csv-template"} download className="inline-flex items-center gap-1 text-xs text-amber-500 hover:underline border border-amber-500/20 rounded px-2 py-1 bg-white shrink-0" data-testid="sftp-template-bom">
+                      <DownloadSimple size={12} /> Modele
+                    </a>
                   </div>
                   <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-lg">
                     <FileText size={18} className="text-purple-500 shrink-0" />
-                    <div>
+                    <div className="flex-1">
                       <p className="font-mono text-sm font-medium">suppliers_*.csv / fournisseurs_*.csv</p>
                       <p className="text-xs text-zinc-500">Import de fournisseurs</p>
                     </div>
+                    <a href={API + "/suppliers/csv-template"} download className="inline-flex items-center gap-1 text-xs text-purple-500 hover:underline border border-purple-500/20 rounded px-2 py-1 bg-white shrink-0" data-testid="sftp-template-suppliers">
+                      <DownloadSimple size={12} /> Modele
+                    </a>
                   </div>
                   <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-lg">
                     <FileText size={18} className="text-pink-500 shrink-0" />
-                    <div>
+                    <div className="flex-1">
                       <p className="font-mono text-sm font-medium">categories_*.csv</p>
                       <p className="text-xs text-zinc-500">Import de categories</p>
                     </div>
+                    <a href={API + "/categories/csv-template"} download className="inline-flex items-center gap-1 text-xs text-pink-500 hover:underline border border-pink-500/20 rounded px-2 py-1 bg-white shrink-0" data-testid="sftp-template-categories">
+                      <DownloadSimple size={12} /> Modele
+                    </a>
                   </div>
                 </div>
               </div>
