@@ -1,7 +1,7 @@
 # PRD - Calculateur de Prix de Revient (PrixRevient)
 
 ## Probleme original
-Application pour calculer le prix de revient d'un produit avec BOM, freinte, main d'oeuvre, frais generaux. Ameliorations progressives: imports CSV/SFTP, RBAC, export Excel, configuration globale, unites, fournisseurs/versions, API KPI, SSO, simulation, multi-sites.
+Application pour calculer le prix de revient d'un produit avec BOM, freinte, main d'oeuvre, frais generaux. Ameliorations progressives: imports CSV/SFTP, RBAC, export Excel, configuration globale, unites, fournisseurs/versions, API KPI, SSO, simulation, multi-sites, code_article, code fournisseur, logs import DB, simulation live.
 
 ## Architecture
 - **Frontend**: React + TailwindCSS + Shadcn UI + Recharts + Phosphor Icons
@@ -30,16 +30,18 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - Import CSV fournisseurs + categories
 - API KPI publique (5 endpoints) avec gestion cles API
 
-### Phase 8 - SSO + Simulation + Multi-sites (Complete - 31 Mars 2026)
-- [x] SSO Google OAuth2 (module pret, activation via Parametres > SSO)
-- [x] SSO Microsoft Azure AD (module pret, activation via Parametres > SSO)
-- [x] Boutons SSO conditionnels sur la page login
-- [x] Endpoint /api/auth/sso/status pour detecter SSO disponible
-- [x] Historique des prix (enregistrement recettes + matieres)
-- [x] Alertes prix fournisseurs (seuil configurable)
-- [x] Simulation What-If : impact variation prix matiere sur recettes
-- [x] Page Simulation avec selecteur matiere, presets %, tableau impacts
-- [x] Gestion multi-sites (CRUD sites, site par defaut auto-seed)
+### Phase 8 - SSO + Simulation + Multi-sites (Complete)
+- SSO Google/Microsoft OAuth2 (modules prets, activation via Parametres > SSO)
+- Historique des prix, Alertes prix fournisseurs
+- Simulation What-If: impact variation prix matiere sur recettes
+- Gestion multi-sites (CRUD sites)
+
+### Phase 9 - Code article, Code fournisseur, Logs import DB, Simulation live (Complete - 1 Avril 2026)
+- [x] code_article sur Matieres premieres (backend + frontend: formulaire + tableau)
+- [x] code sur Fournisseurs (backend + frontend: formulaire + tableau, sans delai/minimum)
+- [x] Logs d'import migres vers MongoDB (/api/import/logs)
+- [x] UI Historique des imports dans ImportCenter (onglet Historique avec actualisation)
+- [x] Simulation live temporaire sur RecipeDetail (mode simulation, edition quantite/prix/freinte/MO, recalcul temps reel sans mutation DB, reinitialisation)
 
 ## Credentials
 - Admin: admin@example.com / Admin123!
@@ -48,26 +50,33 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 
 ## Routes frontend
 - / : Dashboard
-- /materials : Matieres premieres
+- /materials : Matieres premieres (avec code_article)
 - /recipes : Recettes (tableau par fournisseur)
-- /recipes/:id : Detail recette
+- /recipes/:id : Detail recette (avec simulation live)
 - /overheads : Frais generaux
-- /suppliers : Fournisseurs
+- /suppliers : Fournisseurs (avec code)
 - /categories : Categories
 - /costs-table : Tableau des couts + Export Excel
 - /comparison : Comparaison
 - /bom : Arbre de fabrication
 - /simulation : Simulation what-if
-- /settings : Parametres (admin only, 8 onglets)
+- /settings : Parametres (admin only, 8 onglets dont Import avec historique logs)
+
+## DB Schema
+- raw_materials: {..., code_article}
+- suppliers: {..., code}
+- import_logs: {filename, type, status, user, error_details, timestamp, result}
+- recipes: {..., version, supplier_name}
+- api_keys: {key, name, created_by, is_active}
 
 ## Deploiement
 - Domaine: calculprix.appli-sciad.com
-- ZIP: https://cost-calculator-113.preview.emergentagent.com/prixrevient-deploy.zip
+- ZIP: prixrevient-deploy.zip
 - Mise a jour: wget ZIP + unzip -o + pip install -r + yarn build + systemctl restart
 
 ## Backlog
-- P2 : Historique des couts - graphique evolution temporelle sur Dashboard
-- P2 : Alertes prix - notifications visuelles sur le Dashboard
-- P2 : Champ site_id sur recettes et matieres avec filtre par site
-- P3 : Export automatique planifie par email
-- P3 : Application mobile (PWA)
+- P1: Logique backend SSO Google/Microsoft (activation reelle)
+- P1: Logique backend Crontab (gestion taches planifiees)
+- P2: Historique des couts - graphique evolution temporelle sur Dashboard
+- P2: Alertes prix - notifications visuelles sur le Dashboard
+- P2: Champ site_id sur recettes et matieres avec filtre par site
