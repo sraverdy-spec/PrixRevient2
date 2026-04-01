@@ -94,5 +94,12 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - [x] 4 KPIs: Utilisateurs (par role), Imports (succes/erreur), Sites, Alertes stock
 - [x] 3 panneaux: Recettes par categorie (BarChart), Derniers imports, Taches planifiees
 
+### Phase 14 - Jeu de donnees et console DB (Complete - 1 Avril 2026)
+- [x] Endpoint /api/data/seed : 8 categories, 6 fournisseurs, 18 matieres, 7 recettes (2 sous-recettes), 5 frais, 6 unites
+- [x] Endpoint /api/data/reset : reinitialise toutes les collections (garde users + settings)
+- [x] Endpoint /api/data/query : console MongoDB (find, count, aggregate, distinct)
+- [x] Nouvel onglet "Base de donnees" dans Parametres avec seed, reset, console requetes
+- [x] ZIP deploiement mis a jour
+
 ## Backlog
 - P2: Champ site_id sur recettes et matieres avec filtre par site

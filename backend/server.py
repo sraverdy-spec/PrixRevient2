@@ -2148,6 +2148,396 @@ async def get_admin_stats(admin: dict = Depends(require_admin)):
 
 
 
+# ================= DATA MANAGEMENT (SEED / RESET / QUERY) =================
+
+SEED_CATEGORIES = [
+    {"name": "Farines & cereales", "description": "Farine, semoule, amidon, flocons"},
+    {"name": "Produits laitiers", "description": "Lait, creme, beurre, fromage"},
+    {"name": "Fruits & legumes", "description": "Fruits frais, legumes, purees"},
+    {"name": "Sucres & edulcorants", "description": "Sucre, miel, sirop, glucose"},
+    {"name": "Matieres grasses", "description": "Huiles, margarines, saindoux"},
+    {"name": "Epices & aromes", "description": "Vanille, cannelle, extraits, colorants"},
+    {"name": "Oeufs & ovoproduits", "description": "Oeufs entiers, blancs, jaunes"},
+    {"name": "Chocolat & cacao", "description": "Chocolat noir, lait, blanc, cacao"},
+]
+
+SEED_SUPPLIERS = [
+    {"name": "Moulin du Nord", "code": "FRN-001", "contact": "Jean Dupont", "email": "contact@moulin-nord.fr", "phone": "0321456789", "address": "12 rue des Meuniers, 59000 Lille"},
+    {"name": "Laiterie Dupont", "code": "FRN-002", "contact": "Marie Martin", "email": "pro@laiterie-dupont.fr", "phone": "0322334455", "address": "45 avenue du Lait, 62000 Arras"},
+    {"name": "Fruits & Co", "code": "FRN-003", "contact": "Pierre Leroy", "email": "commandes@fruitsco.fr", "phone": "0145678901", "address": "8 marche de Rungis, 94150 Rungis"},
+    {"name": "Sucre France", "code": "FRN-004", "contact": "Sophie Moreau", "email": "ventes@sucrefrance.fr", "phone": "0380123456", "address": "Route de Dijon, 21000 Dijon"},
+    {"name": "Choco Premium", "code": "FRN-005", "contact": "Laurent Blanc", "email": "pro@chocopremium.be", "phone": "+32478901234", "address": "Rue du Chocolat 22, 1000 Bruxelles"},
+    {"name": "Epices du Monde", "code": "FRN-006", "contact": "Fatima Amrani", "email": "info@epicesdumonde.fr", "phone": "0491234567", "address": "15 quai des Epices, 13002 Marseille"},
+]
+
+SEED_UNITS = [
+    {"name": "Kilogramme", "abbreviation": "kg", "type": "poids"},
+    {"name": "Gramme", "abbreviation": "g", "type": "poids"},
+    {"name": "Litre", "abbreviation": "L", "type": "volume"},
+    {"name": "Millilitre", "abbreviation": "mL", "type": "volume"},
+    {"name": "Piece", "abbreviation": "pce", "type": "quantite"},
+    {"name": "Metre", "abbreviation": "m", "type": "longueur"},
+]
+
+SEED_OVERHEADS = [
+    {"name": "Electricite atelier", "category": "Energie", "monthly_amount": 850.0, "allocation_method": "per_unit", "allocation_value": 500},
+    {"name": "Eau", "category": "Energie", "monthly_amount": 180.0, "allocation_method": "per_unit", "allocation_value": 500},
+    {"name": "Location atelier", "category": "Infrastructure", "monthly_amount": 2200.0, "allocation_method": "per_hour", "allocation_value": 160},
+    {"name": "Maintenance equipement", "category": "Equipement", "monthly_amount": 350.0, "allocation_method": "per_unit", "allocation_value": 500},
+    {"name": "Assurance professionnelle", "category": "Infrastructure", "monthly_amount": 420.0, "allocation_method": "per_unit", "allocation_value": 500},
+]
+
+SEED_MATERIALS_SPEC = [
+    {"name": "Farine de ble T55", "code_article": "MAT-001", "unit": "kg", "unit_price": 1.20, "category": "Farines & cereales", "supplier": "Moulin du Nord", "freinte": 2.0, "stock_quantity": 150, "stock_alert_threshold": 20},
+    {"name": "Farine de ble T65", "code_article": "MAT-002", "unit": "kg", "unit_price": 1.35, "category": "Farines & cereales", "supplier": "Moulin du Nord", "freinte": 2.0, "stock_quantity": 80, "stock_alert_threshold": 15},
+    {"name": "Beurre doux 82%", "code_article": "MAT-003", "unit": "kg", "unit_price": 8.50, "category": "Produits laitiers", "supplier": "Laiterie Dupont", "freinte": 1.0, "stock_quantity": 25, "stock_alert_threshold": 5},
+    {"name": "Sucre semoule", "code_article": "MAT-004", "unit": "kg", "unit_price": 1.10, "category": "Sucres & edulcorants", "supplier": "Sucre France", "freinte": 0.5, "stock_quantity": 100, "stock_alert_threshold": 15},
+    {"name": "Oeufs frais (calibre M)", "code_article": "MAT-005", "unit": "pce", "unit_price": 0.28, "category": "Oeufs & ovoproduits", "supplier": "Laiterie Dupont", "freinte": 3.0, "stock_quantity": 360, "stock_alert_threshold": 60},
+    {"name": "Lait entier", "code_article": "MAT-006", "unit": "L", "unit_price": 1.05, "category": "Produits laitiers", "supplier": "Laiterie Dupont", "freinte": 1.0, "stock_quantity": 40, "stock_alert_threshold": 10},
+    {"name": "Creme fraiche 35%", "code_article": "MAT-007", "unit": "L", "unit_price": 4.80, "category": "Produits laitiers", "supplier": "Laiterie Dupont", "freinte": 2.0, "stock_quantity": 15, "stock_alert_threshold": 5},
+    {"name": "Pommes Golden", "code_article": "MAT-008", "unit": "kg", "unit_price": 2.90, "category": "Fruits & legumes", "supplier": "Fruits & Co", "freinte": 8.0, "stock_quantity": 30, "stock_alert_threshold": 10},
+    {"name": "Chocolat noir 70%", "code_article": "MAT-009", "unit": "kg", "unit_price": 12.50, "category": "Chocolat & cacao", "supplier": "Choco Premium", "freinte": 1.5, "stock_quantity": 10, "stock_alert_threshold": 3},
+    {"name": "Levure boulangere", "code_article": "MAT-010", "unit": "kg", "unit_price": 5.20, "category": "Farines & cereales", "supplier": "Moulin du Nord", "freinte": 0.0, "stock_quantity": 5, "stock_alert_threshold": 1},
+    {"name": "Extrait de vanille", "code_article": "MAT-011", "unit": "L", "unit_price": 85.00, "category": "Epices & aromes", "supplier": "Epices du Monde", "freinte": 0.0, "stock_quantity": 2, "stock_alert_threshold": 0.5},
+    {"name": "Sel fin", "code_article": "MAT-012", "unit": "kg", "unit_price": 0.65, "category": "Epices & aromes", "supplier": "Moulin du Nord", "freinte": 0.0, "stock_quantity": 25, "stock_alert_threshold": 5},
+    {"name": "Poudre d'amandes", "code_article": "MAT-013", "unit": "kg", "unit_price": 14.80, "category": "Fruits & legumes", "supplier": "Fruits & Co", "freinte": 1.0, "stock_quantity": 8, "stock_alert_threshold": 2},
+    {"name": "Sucre glace", "code_article": "MAT-014", "unit": "kg", "unit_price": 2.10, "category": "Sucres & edulcorants", "supplier": "Sucre France", "freinte": 1.0, "stock_quantity": 20, "stock_alert_threshold": 5},
+    {"name": "Cacao en poudre", "code_article": "MAT-015", "unit": "kg", "unit_price": 9.80, "category": "Chocolat & cacao", "supplier": "Choco Premium", "freinte": 0.5, "stock_quantity": 6, "stock_alert_threshold": 2},
+    {"name": "Huile de tournesol", "code_article": "MAT-016", "unit": "L", "unit_price": 2.40, "category": "Matieres grasses", "supplier": "Sucre France", "freinte": 0.5, "stock_quantity": 20, "stock_alert_threshold": 5},
+    {"name": "Miel toutes fleurs", "code_article": "MAT-017", "unit": "kg", "unit_price": 11.50, "category": "Sucres & edulcorants", "supplier": "Epices du Monde", "freinte": 0.0, "stock_quantity": 5, "stock_alert_threshold": 1},
+    {"name": "Poires Williams", "code_article": "MAT-018", "unit": "kg", "unit_price": 3.50, "category": "Fruits & legumes", "supplier": "Fruits & Co", "freinte": 10.0, "stock_quantity": 15, "stock_alert_threshold": 5},
+]
+
+@api_router.post("/data/seed")
+async def seed_data(admin: dict = Depends(require_admin)):
+    """Seed the database with sample data"""
+    now = datetime.now(timezone.utc)
+    counts = {}
+
+    # Categories
+    cat_map = {}
+    inserted_cats = 0
+    for c in SEED_CATEGORIES:
+        exists = await db.categories.find_one({"name": c["name"]})
+        if not exists:
+            cid = str(uuid.uuid4())
+            await db.categories.insert_one({"id": cid, "name": c["name"], "description": c["description"], "created_at": now})
+            cat_map[c["name"]] = cid
+            inserted_cats += 1
+        else:
+            cat_map[c["name"]] = exists["id"]
+    counts["categories"] = inserted_cats
+
+    # Suppliers
+    sup_map = {}
+    inserted_sups = 0
+    for s in SEED_SUPPLIERS:
+        exists = await db.suppliers.find_one({"name": s["name"]})
+        if not exists:
+            sid = str(uuid.uuid4())
+            await db.suppliers.insert_one({"id": sid, **s, "created_at": now})
+            sup_map[s["name"]] = sid
+            inserted_sups += 1
+        else:
+            sup_map[s["name"]] = exists["id"]
+    counts["suppliers"] = inserted_sups
+
+    # Units
+    inserted_units = 0
+    for u in SEED_UNITS:
+        exists = await db.units.find_one({"abbreviation": u["abbreviation"]})
+        if not exists:
+            await db.units.insert_one({"id": str(uuid.uuid4()), **u})
+            inserted_units += 1
+    counts["units"] = inserted_units
+
+    # Overheads
+    oh_ids = []
+    inserted_oh = 0
+    for o in SEED_OVERHEADS:
+        exists = await db.overheads.find_one({"name": o["name"]})
+        if not exists:
+            oid = str(uuid.uuid4())
+            await db.overheads.insert_one({"id": oid, **o, "created_at": now})
+            oh_ids.append(oid)
+            inserted_oh += 1
+        else:
+            oh_ids.append(exists["id"])
+    counts["overheads"] = inserted_oh
+
+    # Raw Materials
+    mat_map = {}
+    inserted_mats = 0
+    for m in SEED_MATERIALS_SPEC:
+        exists = await db.raw_materials.find_one({"name": m["name"]})
+        if not exists:
+            mid = str(uuid.uuid4())
+            cat_id = cat_map.get(m["category"], "")
+            sup_id = sup_map.get(m["supplier"], "")
+            await db.raw_materials.insert_one({
+                "id": mid, "name": m["name"], "code_article": m["code_article"],
+                "unit": m["unit"], "unit_price": m["unit_price"],
+                "supplier_id": sup_id, "supplier_name": m["supplier"],
+                "category_id": cat_id, "description": "",
+                "freinte": m["freinte"], "stock_quantity": m["stock_quantity"],
+                "stock_alert_threshold": m["stock_alert_threshold"], "created_at": now
+            })
+            mat_map[m["name"]] = {"id": mid, "unit": m["unit"], "unit_price": m["unit_price"], "freinte": m["freinte"]}
+            inserted_mats += 1
+        else:
+            mat_map[m["name"]] = {"id": exists["id"], "unit": exists.get("unit", "kg"), "unit_price": exists.get("unit_price", 0), "freinte": exists.get("freinte", 0)}
+    counts["raw_materials"] = inserted_mats
+
+    # Recipes
+    inserted_recipes = 0
+
+    # --- Pate brisee (intermediate) ---
+    if not await db.recipes.find_one({"name": "Pate brisee"}):
+        pb_id = str(uuid.uuid4())
+        await db.recipes.insert_one({
+            "id": pb_id, "name": "Pate brisee", "description": "Pate brisee classique pour tartes",
+            "category_id": cat_map.get("Farines & cereales", ""), "supplier_id": "", "supplier_name": "",
+            "version": 1, "output_quantity": 1.0, "output_unit": "kg", "target_margin": 30.0,
+            "is_intermediate": True,
+            "ingredients": [
+                {"material_id": mat_map.get("Farine de ble T55", {}).get("id", ""), "material_name": "Farine de ble T55", "sub_recipe_id": None, "quantity": 0.5, "unit": "kg", "unit_price": 1.20, "freinte": 2.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Beurre doux 82%", {}).get("id", ""), "material_name": "Beurre doux 82%", "sub_recipe_id": None, "quantity": 0.25, "unit": "kg", "unit_price": 8.50, "freinte": 1.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Oeufs frais (calibre M)", {}).get("id", ""), "material_name": "Oeufs frais (calibre M)", "sub_recipe_id": None, "quantity": 1, "unit": "pce", "unit_price": 0.28, "freinte": 3.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Sel fin", {}).get("id", ""), "material_name": "Sel fin", "sub_recipe_id": None, "quantity": 0.005, "unit": "kg", "unit_price": 0.65, "freinte": 0.0, "is_sub_recipe": False},
+            ],
+            "labor_costs": [{"description": "Petrissage et repos", "hours": 0.5, "hourly_rate": 15.0}],
+            "overhead_ids": [oh_ids[0]] if oh_ids else [],
+            "user_id": "admin@example.com", "created_at": now, "updated_at": now
+        })
+        inserted_recipes += 1
+    pb_doc = await db.recipes.find_one({"name": "Pate brisee"})
+    pb_id = pb_doc["id"] if pb_doc else ""
+
+    # --- Creme patissiere (intermediate) ---
+    if not await db.recipes.find_one({"name": "Creme patissiere"}):
+        cp_id = str(uuid.uuid4())
+        await db.recipes.insert_one({
+            "id": cp_id, "name": "Creme patissiere", "description": "Creme patissiere vanille onctueuse",
+            "category_id": cat_map.get("Produits laitiers", ""), "supplier_id": "", "supplier_name": "",
+            "version": 1, "output_quantity": 1.0, "output_unit": "kg", "target_margin": 30.0,
+            "is_intermediate": True,
+            "ingredients": [
+                {"material_id": mat_map.get("Lait entier", {}).get("id", ""), "material_name": "Lait entier", "sub_recipe_id": None, "quantity": 0.5, "unit": "L", "unit_price": 1.05, "freinte": 1.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Sucre semoule", {}).get("id", ""), "material_name": "Sucre semoule", "sub_recipe_id": None, "quantity": 0.1, "unit": "kg", "unit_price": 1.10, "freinte": 0.5, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Oeufs frais (calibre M)", {}).get("id", ""), "material_name": "Oeufs frais (calibre M)", "sub_recipe_id": None, "quantity": 3, "unit": "pce", "unit_price": 0.28, "freinte": 3.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Farine de ble T55", {}).get("id", ""), "material_name": "Farine de ble T55", "sub_recipe_id": None, "quantity": 0.04, "unit": "kg", "unit_price": 1.20, "freinte": 2.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Extrait de vanille", {}).get("id", ""), "material_name": "Extrait de vanille", "sub_recipe_id": None, "quantity": 0.005, "unit": "L", "unit_price": 85.0, "freinte": 0.0, "is_sub_recipe": False},
+            ],
+            "labor_costs": [{"description": "Cuisson et refroidissement", "hours": 0.75, "hourly_rate": 15.0}],
+            "overhead_ids": [oh_ids[0]] if oh_ids else [],
+            "user_id": "admin@example.com", "created_at": now, "updated_at": now
+        })
+        inserted_recipes += 1
+    cp_doc = await db.recipes.find_one({"name": "Creme patissiere"})
+    cp_id = cp_doc["id"] if cp_doc else ""
+
+    # --- Tarte aux pommes (final - uses Pate brisee) ---
+    if not await db.recipes.find_one({"name": "Tarte aux pommes"}):
+        await db.recipes.insert_one({
+            "id": str(uuid.uuid4()), "name": "Tarte aux pommes", "description": "Tarte aux pommes tradition avec pate brisee maison",
+            "category_id": cat_map.get("Fruits & legumes", ""), "supplier_id": sup_map.get("Fruits & Co", ""), "supplier_name": "Fruits & Co",
+            "version": 1, "output_quantity": 8.0, "output_unit": "part", "target_margin": 35.0,
+            "is_intermediate": False,
+            "ingredients": [
+                {"material_id": None, "material_name": "Pate brisee", "sub_recipe_id": pb_id, "quantity": 0.4, "unit": "kg", "unit_price": 0, "freinte": 0, "is_sub_recipe": True},
+                {"material_id": mat_map.get("Pommes Golden", {}).get("id", ""), "material_name": "Pommes Golden", "sub_recipe_id": None, "quantity": 0.8, "unit": "kg", "unit_price": 2.90, "freinte": 8.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Sucre semoule", {}).get("id", ""), "material_name": "Sucre semoule", "sub_recipe_id": None, "quantity": 0.08, "unit": "kg", "unit_price": 1.10, "freinte": 0.5, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Beurre doux 82%", {}).get("id", ""), "material_name": "Beurre doux 82%", "sub_recipe_id": None, "quantity": 0.03, "unit": "kg", "unit_price": 8.50, "freinte": 1.0, "is_sub_recipe": False},
+            ],
+            "labor_costs": [
+                {"description": "Preparation et decoupe", "hours": 0.5, "hourly_rate": 15.0},
+                {"description": "Cuisson et finition", "hours": 0.75, "hourly_rate": 15.0},
+            ],
+            "overhead_ids": oh_ids[:2] if len(oh_ids) >= 2 else oh_ids,
+            "user_id": "admin@example.com", "created_at": now, "updated_at": now
+        })
+        inserted_recipes += 1
+
+    # --- Eclair au chocolat (uses Creme patissiere) ---
+    if not await db.recipes.find_one({"name": "Eclair au chocolat"}):
+        await db.recipes.insert_one({
+            "id": str(uuid.uuid4()), "name": "Eclair au chocolat", "description": "Eclair garni de creme patissiere, glace chocolat",
+            "category_id": cat_map.get("Chocolat & cacao", ""), "supplier_id": sup_map.get("Choco Premium", ""), "supplier_name": "Choco Premium",
+            "version": 1, "output_quantity": 12.0, "output_unit": "piece", "target_margin": 40.0,
+            "is_intermediate": False,
+            "ingredients": [
+                {"material_id": mat_map.get("Farine de ble T55", {}).get("id", ""), "material_name": "Farine de ble T55", "sub_recipe_id": None, "quantity": 0.15, "unit": "kg", "unit_price": 1.20, "freinte": 2.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Beurre doux 82%", {}).get("id", ""), "material_name": "Beurre doux 82%", "sub_recipe_id": None, "quantity": 0.1, "unit": "kg", "unit_price": 8.50, "freinte": 1.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Oeufs frais (calibre M)", {}).get("id", ""), "material_name": "Oeufs frais (calibre M)", "sub_recipe_id": None, "quantity": 4, "unit": "pce", "unit_price": 0.28, "freinte": 3.0, "is_sub_recipe": False},
+                {"material_id": None, "material_name": "Creme patissiere", "sub_recipe_id": cp_id, "quantity": 0.5, "unit": "kg", "unit_price": 0, "freinte": 0, "is_sub_recipe": True},
+                {"material_id": mat_map.get("Chocolat noir 70%", {}).get("id", ""), "material_name": "Chocolat noir 70%", "sub_recipe_id": None, "quantity": 0.15, "unit": "kg", "unit_price": 12.50, "freinte": 1.5, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Creme fraiche 35%", {}).get("id", ""), "material_name": "Creme fraiche 35%", "sub_recipe_id": None, "quantity": 0.1, "unit": "L", "unit_price": 4.80, "freinte": 2.0, "is_sub_recipe": False},
+            ],
+            "labor_costs": [
+                {"description": "Pate a choux + pochage", "hours": 1.0, "hourly_rate": 15.0},
+                {"description": "Glacage et assemblage", "hours": 0.5, "hourly_rate": 15.0},
+            ],
+            "overhead_ids": oh_ids[:3] if len(oh_ids) >= 3 else oh_ids,
+            "user_id": "admin@example.com", "created_at": now, "updated_at": now
+        })
+        inserted_recipes += 1
+
+    # --- Pain de campagne ---
+    if not await db.recipes.find_one({"name": "Pain de campagne"}):
+        await db.recipes.insert_one({
+            "id": str(uuid.uuid4()), "name": "Pain de campagne", "description": "Pain rustique au levain avec melange de farines",
+            "category_id": cat_map.get("Farines & cereales", ""), "supplier_id": sup_map.get("Moulin du Nord", ""), "supplier_name": "Moulin du Nord",
+            "version": 1, "output_quantity": 4.0, "output_unit": "piece", "target_margin": 25.0,
+            "is_intermediate": False,
+            "ingredients": [
+                {"material_id": mat_map.get("Farine de ble T65", {}).get("id", ""), "material_name": "Farine de ble T65", "sub_recipe_id": None, "quantity": 1.0, "unit": "kg", "unit_price": 1.35, "freinte": 2.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Levure boulangere", {}).get("id", ""), "material_name": "Levure boulangere", "sub_recipe_id": None, "quantity": 0.02, "unit": "kg", "unit_price": 5.20, "freinte": 0.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Sel fin", {}).get("id", ""), "material_name": "Sel fin", "sub_recipe_id": None, "quantity": 0.02, "unit": "kg", "unit_price": 0.65, "freinte": 0.0, "is_sub_recipe": False},
+            ],
+            "labor_costs": [
+                {"description": "Petrissage et pousse", "hours": 0.5, "hourly_rate": 14.0},
+                {"description": "Faconnage et cuisson", "hours": 1.0, "hourly_rate": 14.0},
+            ],
+            "overhead_ids": oh_ids[:2] if len(oh_ids) >= 2 else oh_ids,
+            "user_id": "admin@example.com", "created_at": now, "updated_at": now
+        })
+        inserted_recipes += 1
+
+    # --- Croissant au beurre ---
+    if not await db.recipes.find_one({"name": "Croissant au beurre"}):
+        await db.recipes.insert_one({
+            "id": str(uuid.uuid4()), "name": "Croissant au beurre", "description": "Croissant pur beurre feuillete",
+            "category_id": cat_map.get("Produits laitiers", ""), "supplier_id": sup_map.get("Laiterie Dupont", ""), "supplier_name": "Laiterie Dupont",
+            "version": 1, "output_quantity": 10.0, "output_unit": "piece", "target_margin": 45.0,
+            "is_intermediate": False,
+            "ingredients": [
+                {"material_id": mat_map.get("Farine de ble T55", {}).get("id", ""), "material_name": "Farine de ble T55", "sub_recipe_id": None, "quantity": 0.5, "unit": "kg", "unit_price": 1.20, "freinte": 2.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Beurre doux 82%", {}).get("id", ""), "material_name": "Beurre doux 82%", "sub_recipe_id": None, "quantity": 0.25, "unit": "kg", "unit_price": 8.50, "freinte": 1.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Sucre semoule", {}).get("id", ""), "material_name": "Sucre semoule", "sub_recipe_id": None, "quantity": 0.06, "unit": "kg", "unit_price": 1.10, "freinte": 0.5, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Lait entier", {}).get("id", ""), "material_name": "Lait entier", "sub_recipe_id": None, "quantity": 0.15, "unit": "L", "unit_price": 1.05, "freinte": 1.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Levure boulangere", {}).get("id", ""), "material_name": "Levure boulangere", "sub_recipe_id": None, "quantity": 0.015, "unit": "kg", "unit_price": 5.20, "freinte": 0.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Sel fin", {}).get("id", ""), "material_name": "Sel fin", "sub_recipe_id": None, "quantity": 0.01, "unit": "kg", "unit_price": 0.65, "freinte": 0.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Oeufs frais (calibre M)", {}).get("id", ""), "material_name": "Oeufs frais (calibre M)", "sub_recipe_id": None, "quantity": 1, "unit": "pce", "unit_price": 0.28, "freinte": 3.0, "is_sub_recipe": False},
+            ],
+            "labor_costs": [
+                {"description": "Petrissage et tourage", "hours": 1.5, "hourly_rate": 16.0},
+                {"description": "Faconnage et cuisson", "hours": 0.75, "hourly_rate": 16.0},
+            ],
+            "overhead_ids": oh_ids[:3] if len(oh_ids) >= 3 else oh_ids,
+            "user_id": "admin@example.com", "created_at": now, "updated_at": now
+        })
+        inserted_recipes += 1
+
+    # --- Financier aux amandes ---
+    if not await db.recipes.find_one({"name": "Financier aux amandes"}):
+        await db.recipes.insert_one({
+            "id": str(uuid.uuid4()), "name": "Financier aux amandes", "description": "Petit gateau moelleux aux amandes et beurre noisette",
+            "category_id": cat_map.get("Fruits & legumes", ""), "supplier_id": sup_map.get("Fruits & Co", ""), "supplier_name": "Fruits & Co",
+            "version": 1, "output_quantity": 20.0, "output_unit": "piece", "target_margin": 50.0,
+            "is_intermediate": False,
+            "ingredients": [
+                {"material_id": mat_map.get("Poudre d'amandes", {}).get("id", ""), "material_name": "Poudre d'amandes", "sub_recipe_id": None, "quantity": 0.12, "unit": "kg", "unit_price": 14.80, "freinte": 1.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Sucre glace", {}).get("id", ""), "material_name": "Sucre glace", "sub_recipe_id": None, "quantity": 0.15, "unit": "kg", "unit_price": 2.10, "freinte": 1.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Beurre doux 82%", {}).get("id", ""), "material_name": "Beurre doux 82%", "sub_recipe_id": None, "quantity": 0.12, "unit": "kg", "unit_price": 8.50, "freinte": 1.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Oeufs frais (calibre M)", {}).get("id", ""), "material_name": "Oeufs frais (calibre M)", "sub_recipe_id": None, "quantity": 4, "unit": "pce", "unit_price": 0.28, "freinte": 3.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Farine de ble T55", {}).get("id", ""), "material_name": "Farine de ble T55", "sub_recipe_id": None, "quantity": 0.05, "unit": "kg", "unit_price": 1.20, "freinte": 2.0, "is_sub_recipe": False},
+                {"material_id": mat_map.get("Miel toutes fleurs", {}).get("id", ""), "material_name": "Miel toutes fleurs", "sub_recipe_id": None, "quantity": 0.02, "unit": "kg", "unit_price": 11.50, "freinte": 0.0, "is_sub_recipe": False},
+            ],
+            "labor_costs": [{"description": "Preparation et cuisson", "hours": 0.75, "hourly_rate": 15.0}],
+            "overhead_ids": oh_ids[:2] if len(oh_ids) >= 2 else oh_ids,
+            "user_id": "admin@example.com", "created_at": now, "updated_at": now
+        })
+        inserted_recipes += 1
+
+    counts["recipes"] = inserted_recipes
+
+    return {"message": "Jeu de donnees charge avec succes", "inserted": counts}
+
+
+@api_router.post("/data/reset")
+async def reset_data(admin: dict = Depends(require_admin)):
+    """Reset all data collections (keeps users and settings)"""
+    collections_to_clear = [
+        "raw_materials", "recipes", "categories", "suppliers",
+        "overheads", "units", "sites", "crontabs",
+        "import_logs", "price_history", "price_history_materials", "api_keys"
+    ]
+    deleted = {}
+    for col_name in collections_to_clear:
+        col = db[col_name]
+        result = await col.delete_many({})
+        deleted[col_name] = result.deleted_count
+
+    # Re-create default site
+    await db.sites.insert_one({
+        "id": str(uuid.uuid4()), "name": "Site principal", "address": "",
+        "is_default": True, "created_at": datetime.now(timezone.utc)
+    })
+
+    return {"message": "Donnees reinitialisees", "deleted": deleted}
+
+
+@api_router.post("/data/query")
+async def execute_query(request: Request, admin: dict = Depends(require_admin)):
+    """Execute a MongoDB query (find/count/aggregate) - admin only"""
+    import json as json_mod
+    body = await request.json()
+    collection_name = body.get("collection", "")
+    operation = body.get("operation", "find")
+    query_filter = body.get("filter", {})
+    projection = body.get("projection", {})
+    limit = min(body.get("limit", 50), 200)
+    sort_field = body.get("sort", None)
+    pipeline = body.get("pipeline", [])
+
+    valid_collections = [
+        "users", "raw_materials", "recipes", "categories", "suppliers",
+        "overheads", "units", "sites", "crontabs", "import_logs",
+        "price_history", "price_history_materials", "api_keys", "settings"
+    ]
+    if collection_name not in valid_collections:
+        raise HTTPException(status_code=400, detail=f"Collection invalide. Collections: {', '.join(valid_collections)}")
+
+    col = db[collection_name]
+
+    # Always exclude _id and password_hash
+    if "_id" not in projection:
+        projection["_id"] = 0
+    if collection_name == "users":
+        projection["password_hash"] = 0
+
+    try:
+        if operation == "find":
+            cursor = col.find(query_filter, projection)
+            if sort_field:
+                cursor = cursor.sort(sort_field, -1)
+            results = await cursor.limit(limit).to_list(limit)
+            return {"count": len(results), "results": results}
+
+        elif operation == "count":
+            count = await col.count_documents(query_filter)
+            return {"count": count, "results": []}
+
+        elif operation == "aggregate":
+            results = await col.aggregate(pipeline).to_list(limit)
+            for r in results:
+                if "_id" in r and isinstance(r["_id"], ObjectId):
+                    r["_id"] = str(r["_id"])
+            return {"count": len(results), "results": results}
+
+        elif operation == "distinct":
+            field = body.get("field", "name")
+            results = await col.distinct(field, query_filter)
+            return {"count": len(results), "results": results}
+
+        else:
+            raise HTTPException(status_code=400, detail="Operation invalide. Utilisez: find, count, aggregate, distinct")
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erreur requete: {str(e)}")
+
+
+
 # ================= ROOT =================
 
 @api_router.get("/")

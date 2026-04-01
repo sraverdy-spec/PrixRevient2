@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Gear, Palette, Image, Users, CloudArrowUp, Timer, Plugs, UploadSimple, Trash, Play, Plus, FloppyDisk, Ruler, Pencil, Key, Copy, Eye, EyeSlash, Buildings } from "@phosphor-icons/react";
+import { Gear, Palette, Image, Users, CloudArrowUp, Timer, Plugs, UploadSimple, Trash, Play, Plus, FloppyDisk, Ruler, Pencil, Key, Copy, Eye, EyeSlash, Buildings, Database, ArrowClockwise, MagnifyingGlass, Lightning, Warning } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,15 @@ export default function Settings() {
   const [isSiteDialogOpen, setIsSiteDialogOpen] = useState(false);
   const [editingSite, setEditingSite] = useState(null);
   const [siteForm, setSiteForm] = useState({ name: "", address: "" });
+  const [seeding, setSeeding] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [queryCollection, setQueryCollection] = useState("recipes");
+  const [queryOperation, setQueryOperation] = useState("find");
+  const [queryFilter, setQueryFilter] = useState("{}");
+  const [queryLimit, setQueryLimit] = useState(20);
+  const [queryResults, setQueryResults] = useState(null);
+  const [queryLoading, setQueryLoading] = useState(false);
 
   useEffect(() => {
     Promise.all([fetchSettings(), fetchCrontabs(), fetchUnits(), fetchApiKeys(), fetchApiDoc(), fetchSites()]).finally(() => setLoading(false));
@@ -171,6 +180,45 @@ export default function Settings() {
     } catch (err) { toast.error(err.response?.data?.detail || "Erreur"); }
   };
 
+  const handleSeedData = async () => {
+    setSeeding(true);
+    try {
+      const res = await axios.post(API + "/data/seed");
+      const counts = res.data.inserted;
+      const parts = Object.entries(counts).filter(([,v]) => v > 0).map(([k,v]) => `${v} ${k}`);
+      toast.success(parts.length > 0 ? `Insere: ${parts.join(", ")}` : "Donnees deja presentes");
+    } catch (err) { toast.error(err.response?.data?.detail || "Erreur"); }
+    finally { setSeeding(false); }
+  };
+
+  const handleResetData = async () => {
+    setResetting(true);
+    try {
+      await axios.post(API + "/data/reset");
+      toast.success("Donnees reinitialisees");
+      setConfirmReset(false);
+    } catch (err) { toast.error(err.response?.data?.detail || "Erreur"); }
+    finally { setResetting(false); }
+  };
+
+  const handleExecuteQuery = async () => {
+    setQueryLoading(true);
+    setQueryResults(null);
+    try {
+      let parsedFilter = {};
+      try { parsedFilter = JSON.parse(queryFilter); } catch { toast.error("JSON invalide"); setQueryLoading(false); return; }
+      const payload = { collection: queryCollection, operation: queryOperation, limit: queryLimit };
+      if (queryOperation === "aggregate") {
+        payload.pipeline = Array.isArray(parsedFilter) ? parsedFilter : [parsedFilter];
+      } else {
+        payload.filter = parsedFilter;
+      }
+      const res = await axios.post(API + "/data/query", payload);
+      setQueryResults(res.data);
+    } catch (err) { toast.error(err.response?.data?.detail || "Erreur requete"); }
+    finally { setQueryLoading(false); }
+  };
+
   const handleSaveSettings = async () => {
     setSaving(true);
     try {
@@ -269,6 +317,7 @@ export default function Settings() {
           <TabsTrigger value="units" data-testid="tab-units"><Ruler size={16} className="mr-2" /> Unites</TabsTrigger>
           <TabsTrigger value="api" data-testid="tab-api"><Key size={16} className="mr-2" /> API</TabsTrigger>
           <TabsTrigger value="sites" data-testid="tab-sites"><Buildings size={16} className="mr-2" /> Sites</TabsTrigger>
+          <TabsTrigger value="database" data-testid="tab-database"><Database size={16} className="mr-2" /> Base de donnees</TabsTrigger>
           <TabsTrigger value="sso" data-testid="tab-sso"><Plugs size={16} className="mr-2" /> SSO</TabsTrigger>
         </TabsList>
 
@@ -703,6 +752,128 @@ export default function Settings() {
               </form>
             </DialogContent>
           </Dialog>
+        </TabsContent>
+
+        {/* ===== DATABASE TAB ===== */}
+        <TabsContent value="database">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {/* Seed Data */}
+            <div className="bg-white border border-zinc-200 rounded-lg p-6" data-testid="seed-data-card">
+              <h3 className="font-semibold text-zinc-900 flex items-center gap-2 mb-2">
+                <Lightning size={20} className="text-amber-500" /> Charger un jeu de donnees
+              </h3>
+              <p className="text-sm text-zinc-500 mb-4">
+                Insere des donnees d'exemple realistes : 8 categories, 6 fournisseurs, 18 matieres premieres,
+                7 recettes (dont 2 sous-recettes), 5 frais generaux, 6 unites.
+              </p>
+              <p className="text-xs text-zinc-400 mb-4">Les donnees existantes ne sont pas ecrasees (insertion uniquement si absent).</p>
+              <Button onClick={handleSeedData} disabled={seeding} style={{ backgroundColor: settings.primary_color }} data-testid="seed-data-btn">
+                <Lightning size={16} className="mr-2" /> {seeding ? "Chargement..." : "Charger les donnees d'exemple"}
+              </Button>
+            </div>
+
+            {/* Reset Data */}
+            <div className="bg-white border border-red-200 rounded-lg p-6" data-testid="reset-data-card">
+              <h3 className="font-semibold text-red-700 flex items-center gap-2 mb-2">
+                <ArrowClockwise size={20} /> Reinitialiser les donnees
+              </h3>
+              <p className="text-sm text-zinc-500 mb-4">
+                Supprime toutes les donnees metier (matieres, recettes, categories, fournisseurs, frais, unites, sites, taches, imports, historiques, cles API).
+              </p>
+              <p className="text-xs text-red-500 font-medium mb-4">Les comptes utilisateurs et les parametres sont conserves.</p>
+              {!confirmReset ? (
+                <Button variant="outline" className="border-red-300 text-red-600 hover:bg-red-50" onClick={() => setConfirmReset(true)} data-testid="reset-data-btn">
+                  <Trash size={16} className="mr-2" /> Reinitialiser
+                </Button>
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <Warning size={20} className="text-red-600 flex-shrink-0" />
+                  <span className="text-sm text-red-700 font-medium">Confirmer la suppression de toutes les donnees ?</span>
+                  <div className="flex gap-2 ml-auto">
+                    <Button variant="outline" size="sm" onClick={() => setConfirmReset(false)}>Annuler</Button>
+                    <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={handleResetData} disabled={resetting} data-testid="confirm-reset-btn">
+                      {resetting ? "Suppression..." : "Confirmer"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Query Console */}
+          <div className="bg-white border border-zinc-200 rounded-lg p-6" data-testid="query-console">
+            <h3 className="font-semibold text-zinc-900 flex items-center gap-2 mb-4">
+              <MagnifyingGlass size={20} /> Console de requetes MongoDB
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+              <div className="space-y-1">
+                <Label className="text-xs">Collection</Label>
+                <Select value={queryCollection} onValueChange={setQueryCollection}>
+                  <SelectTrigger data-testid="query-collection-select"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["recipes","raw_materials","categories","suppliers","overheads","units","sites","users","crontabs","import_logs","price_history","price_history_materials","api_keys","settings"].map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Operation</Label>
+                <Select value={queryOperation} onValueChange={v => { setQueryOperation(v); if (v === "aggregate") setQueryFilter("[{}]"); else setQueryFilter("{}"); }}>
+                  <SelectTrigger data-testid="query-operation-select"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="find">find</SelectItem>
+                    <SelectItem value="count">count</SelectItem>
+                    <SelectItem value="aggregate">aggregate</SelectItem>
+                    <SelectItem value="distinct">distinct</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Limite</Label>
+                <Input type="number" value={queryLimit} onChange={e => setQueryLimit(Number(e.target.value))} min={1} max={200} data-testid="query-limit-input" />
+              </div>
+              <div className="space-y-1 flex items-end">
+                <Button onClick={handleExecuteQuery} disabled={queryLoading} className="w-full" style={{ backgroundColor: settings.primary_color }} data-testid="execute-query-btn">
+                  <Play size={16} className="mr-2" /> {queryLoading ? "Execution..." : "Executer"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1 mb-4">
+              <Label className="text-xs">{queryOperation === "aggregate" ? "Pipeline (JSON array)" : queryOperation === "distinct" ? 'Filtre + champ (ex: {\"field\": \"name\"})' : "Filtre (JSON)"}</Label>
+              <textarea
+                value={queryFilter}
+                onChange={e => setQueryFilter(e.target.value)}
+                rows={3}
+                className="w-full font-mono text-sm border border-zinc-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-zinc-50"
+                placeholder='{"name": {"$regex": "tarte", "$options": "i"}}'
+                spellCheck={false}
+                data-testid="query-filter-input"
+              />
+              <div className="flex flex-wrap gap-2 mt-1">
+                <button onClick={() => setQueryFilter("{}")} className="text-[10px] px-2 py-0.5 bg-zinc-100 rounded hover:bg-zinc-200">Tout</button>
+                <button onClick={() => setQueryFilter('{"name": {"$regex": "", "$options": "i"}}')} className="text-[10px] px-2 py-0.5 bg-zinc-100 rounded hover:bg-zinc-200">Recherche nom</button>
+                <button onClick={() => { setQueryOperation("count"); setQueryFilter("{}"); }} className="text-[10px] px-2 py-0.5 bg-zinc-100 rounded hover:bg-zinc-200">Compter tout</button>
+                <button onClick={() => { setQueryOperation("aggregate"); setQueryFilter('[{"$group": {"_id": "$category_id", "total": {"$sum": 1}}}, {"$sort": {"total": -1}}]'); }} className="text-[10px] px-2 py-0.5 bg-zinc-100 rounded hover:bg-zinc-200">Grouper par categorie</button>
+                <button onClick={() => { setQueryOperation("distinct"); setQueryFilter('{"field": "supplier_name"}'); }} className="text-[10px] px-2 py-0.5 bg-zinc-100 rounded hover:bg-zinc-200">Valeurs distinctes</button>
+              </div>
+            </div>
+
+            {queryResults && (
+              <div className="border border-zinc-200 rounded-lg overflow-hidden" data-testid="query-results">
+                <div className="flex items-center justify-between px-4 py-2 bg-zinc-50 border-b border-zinc-200">
+                  <span className="text-xs font-medium text-zinc-600">{queryResults.count} resultat(s)</span>
+                  <button onClick={() => { navigator.clipboard.writeText(JSON.stringify(queryResults.results, null, 2)); toast.success("Copie"); }} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                    <Copy size={12} /> Copier JSON
+                  </button>
+                </div>
+                <div className="max-h-[400px] overflow-auto">
+                  <pre className="text-xs font-mono p-4 text-zinc-700 whitespace-pre-wrap">{JSON.stringify(queryResults.results, null, 2)}</pre>
+                </div>
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         {/* ===== SSO TAB ===== */}
