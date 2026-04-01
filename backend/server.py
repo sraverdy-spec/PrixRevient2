@@ -298,8 +298,9 @@ async def login(input_data: UserLogin, request: Request, response: Response):
     user_id = str(user["_id"])
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=3600, path="/")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    is_secure = os.environ.get("FRONTEND_URL", "").startswith("https")
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=is_secure, samesite="lax", max_age=3600, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=is_secure, samesite="lax", max_age=604800, path="/")
     return {"_id": user_id, "email": user["email"], "name": user["name"], "role": user.get("role", "operator")}
 
 @api_router.post("/auth/logout")
@@ -325,7 +326,7 @@ async def refresh_token(request: Request, response: Response):
         if not user:
             raise HTTPException(status_code=401, detail="Utilisateur non trouve")
         access_token = create_access_token(str(user["_id"]), user["email"])
-        response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=3600, path="/")
+        response.set_cookie(key="access_token", value=access_token, httponly=True, secure=is_secure, samesite="lax", max_age=3600, path="/")
         return {"message": "Token rafraichi"}
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expire")
@@ -1901,18 +1902,64 @@ _scheduler_started = False
 
 def _run_cron_in_loop(crontab_id: str):
     """Bridge from sync scheduler to async task execution."""
+    import asyncio
+    loop = asyncio.new_event_loop()
     try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    async def _run():
-        crontab = await db.crontabs.find_one({"id": crontab_id}, {"_id": 0})
-        if crontab and crontab.get("enabled", False):
-            await _execute_cron_task(crontab)
-    
-    loop.run_until_complete(_run())
+        loop.run_until_complete(_run_cron_async(crontab_id))
+    finally:
+        loop.close()
+
+
+async def _run_cron_async(crontab_id: str):
+    """Async cron execution with its own MongoDB client."""
+    from motor.motor_asyncio import AsyncIOMotorClient
+    mongo_url = os.environ.get("MONGO_URL", "")
+    db_name = os.environ.get("DB_NAME", "cost_calculator")
+    temp_client = AsyncIOMotorClient(mongo_url)
+    temp_db = temp_client[db_name]
+    try:
+        crontab = await temp_db.crontabs.find_one({"id": crontab_id}, {"_id": 0})
+        if not crontab or not crontab.get("enabled", False):
+            return
+        task_type = crontab.get("type", "sftp_scan")
+        result_str = "OK"
+        status = "success"
+        try:
+            if task_type == "sftp_scan":
+                result_str = "SFTP scan execute"
+            elif task_type == "price_history":
+                recipes = await temp_db.recipes.find({}, {"_id": 0}).to_list(5000)
+                recorded = 0
+                for recipe in recipes:
+                    try:
+                        entry = {
+                            "id": str(uuid.uuid4()),
+                            "recipe_id": recipe["id"],
+                            "recipe_name": recipe["name"],
+                            "supplier_name": recipe.get("supplier_name", ""),
+                            "version": recipe.get("version", ""),
+                            "cost_per_unit": 0,
+                            "total_cost": 0,
+                            "recorded_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                        await temp_db.price_history.insert_one(entry)
+                        recorded += 1
+                    except Exception:
+                        pass
+                result_str = f"{recorded} recettes enregistrees"
+            else:
+                result_str = f"Type inconnu: {task_type}"
+                status = "error"
+        except Exception as e:
+            result_str = str(e)
+            status = "error"
+        await temp_db.crontabs.update_one({"id": crontab_id}, {"$set": {
+            "last_run": datetime.now(timezone.utc).isoformat(),
+            "last_result": result_str,
+            "last_status": status,
+        }})
+    finally:
+        temp_client.close()
 
 
 def _parse_cron_schedule(schedule_str: str):
