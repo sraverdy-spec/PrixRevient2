@@ -37,6 +37,7 @@ deactivate
 echo -e "${BLUE}[5/7] Mise a jour du frontend...${NC}"
 cp -r /tmp/prixrevient-update/frontend/src $APP_DIR/frontend/
 cp /tmp/prixrevient-update/frontend/package.json $APP_DIR/frontend/
+# Ne PAS ecraser le .env local
 cd $APP_DIR/frontend
 yarn install --silent
 yarn build
