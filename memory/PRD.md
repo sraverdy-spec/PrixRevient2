@@ -1,7 +1,7 @@
 # PRD - Calculateur de Prix de Revient (PrixRevient)
 
 ## Probleme original
-Application pour calculer le prix de revient d'un produit avec BOM, freinte, main d'oeuvre, frais generaux. Ameliorations progressives: imports CSV/SFTP, RBAC, export Excel, configuration globale, unites, fournisseurs/versions, API KPI, SSO, simulation, multi-sites, code_article, code fournisseur, logs import DB, simulation live, scheduler integre.
+Application pour calculer le prix de revient d'un produit avec BOM, freinte, main d'oeuvre, frais generaux. Ameliorations progressives: imports CSV/SFTP, RBAC, export Excel, configuration globale, unites, fournisseurs/versions, API KPI, SSO, simulation, multi-sites, code_article, code fournisseur, logs import DB, simulation live, scheduler integre, dashboard evolution prix.
 
 ## Architecture
 - **Frontend**: React + TailwindCSS + Shadcn UI + Recharts + Phosphor Icons
@@ -42,15 +42,17 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - Logs d'import migres vers MongoDB avec UI Historique
 - Simulation live temporaire sur RecipeDetail
 
-### Phase 10 - Scheduler integre + SSO valide (Complete - 1 Avril 2026)
-- [x] APScheduler integre au backend (BackgroundScheduler)
-- [x] Execution automatique des taches planifiees (sftp_scan, price_history)
-- [x] sync_scheduler() : synchronisation DB <-> scheduler a chaque CRUD
-- [x] /api/scheduler/status : etat du scheduler + prochaines executions
-- [x] last_status + last_result affiches dans l'UI avec badges couleur
-- [x] Type price_history : enregistrement automatique des prix de toutes les recettes
-- [x] SSO backend complet (Google + Microsoft OAuth2 avec callbacks)
-- [x] /api/auth/sso/status : detection SSO disponible pour login
+### Phase 10 - Scheduler integre (Complete - 1 Avril 2026)
+- APScheduler integre au backend (BackgroundScheduler)
+- Execution automatique: sftp_scan + price_history
+- sync_scheduler() + /api/scheduler/status
+- last_status/last_result affiches avec badges couleur
+
+### Phase 11 - Dashboard evolution prix + alertes (Complete - 1 Avril 2026)
+- [x] Graphique LineChart evolution des prix de revient sur 90 jours
+- [x] Donnees groupees par date, une ligne par recette
+- [x] Panneau alertes prix matieres (hausse/baisse avec pourcentage)
+- [x] Integration avec /api/price-history et /api/price-history/alerts
 
 ## Credentials
 - Admin: admin@example.com / Admin123!
@@ -58,7 +60,7 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - Operateur: operator@example.com / Operator123!
 
 ## Routes frontend
-- / : Dashboard
+- / : Dashboard (avec evolution prix + alertes)
 - /materials : Matieres premieres (avec code_article)
 - /recipes : Recettes (tableau par fournisseur)
 - /recipes/:id : Detail recette (avec simulation live)
@@ -79,8 +81,7 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - api_keys: {key, name, created_by, is_active}
 - crontabs: {id, name, type, schedule, enabled, last_run, last_result, last_status, created_at}
 - price_history: {id, recipe_id, recipe_name, supplier_name, version, cost_per_unit, total_cost, recorded_at}
+- price_history_materials: {id, material_id, material_name, unit_price, supplier_name, recorded_at}
 
 ## Backlog
-- P2: Historique des couts - graphique evolution temporelle sur Dashboard
-- P2: Alertes prix - notifications visuelles sur le Dashboard
 - P2: Champ site_id sur recettes et matieres avec filtre par site
