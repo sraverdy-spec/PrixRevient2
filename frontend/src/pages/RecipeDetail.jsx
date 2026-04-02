@@ -488,9 +488,9 @@ const RecipeDetail = () => {
                 <Package size={18} className="text-[#002FA7]" />
                 <span className="stat-label">Matieres</span>
               </div>
-              <div className="text-2xl font-bold font-mono">{activeCost.total_material_cost.toFixed(2)} EUR</div>
+              <div className="text-2xl font-bold font-mono">{(activeCost.total_material_cost || 0).toFixed(2)} EUR</div>
               {activeCost.total_freinte_cost > 0 && (
-                <p className="text-xs text-red-500 mt-1">dont {activeCost.total_freinte_cost.toFixed(2)} EUR freinte</p>
+                <p className="text-xs text-red-500 mt-1">dont {(activeCost.total_freinte_cost || 0).toFixed(2)} EUR freinte</p>
               )}
             </div>
             <div className="stat-card" data-testid="labor-cost-card">
@@ -498,29 +498,29 @@ const RecipeDetail = () => {
                 <Clock size={18} className="text-[#10B981]" />
                 <span className="stat-label">Main d'oeuvre</span>
               </div>
-              <div className="text-2xl font-bold font-mono text-[#10B981]">{activeCost.total_labor_cost.toFixed(2)} EUR</div>
+              <div className="text-2xl font-bold font-mono text-[#10B981]">{(activeCost.total_labor_cost || 0).toFixed(2)} EUR</div>
             </div>
             <div className="stat-card" data-testid="overhead-cost-card">
               <div className="flex items-center gap-2 mb-2">
                 <Gear size={18} className="text-[#F59E0B]" />
                 <span className="stat-label">Frais generaux</span>
               </div>
-              <div className="text-2xl font-bold font-mono text-[#F59E0B]">{activeCost.total_overhead_cost.toFixed(2)} EUR</div>
+              <div className="text-2xl font-bold font-mono text-[#F59E0B]">{(activeCost.total_overhead_cost || 0).toFixed(2)} EUR</div>
             </div>
-            <div className={`stat-card ${hasSimChanges ? "bg-amber-500" : "bg-[#002FA7]"}`} data-testid="total-cost-card">
+            <div className="stat-card" style={{ backgroundColor: hasSimChanges ? "#F59E0B" : "#002FA7" }} data-testid="total-cost-card">
               <div className="flex items-center gap-2 mb-2">
                 <Calculator size={18} className="text-white" />
                 <span className="stat-label text-white/80">Prix revient / unite</span>
               </div>
-              <div className="text-2xl font-bold font-mono text-white">{activeCost.cost_per_unit.toFixed(2)} EUR</div>
-              <p className="text-xs text-white/70 mt-1">Total: {activeCost.total_cost.toFixed(2)} EUR</p>
+              <div className="text-2xl font-bold font-mono text-white">{(activeCost.cost_per_unit || 0).toFixed(2)} EUR</div>
+              <p className="text-xs text-white/70 mt-1">Total: {(activeCost.total_cost || 0).toFixed(2)} EUR</p>
             </div>
-            <div className={`stat-card ${hasSimChanges ? "bg-amber-600" : "bg-[#10B981]"}`} data-testid="suggested-price-card">
+            <div className="stat-card" style={{ backgroundColor: hasSimChanges ? "#D97706" : "#10B981" }} data-testid="suggested-price-card">
               <div className="flex items-center gap-2 mb-2">
                 <CurrencyCircleDollar size={18} className="text-white" />
-                <span className="stat-label text-white/80">Prix vente (marge {activeCost.target_margin}%)</span>
+                <span className="stat-label text-white/80">Prix vente (marge {activeCost.target_margin || 30}%)</span>
               </div>
-              <div className="text-2xl font-bold font-mono text-white">{activeCost.suggested_price.toFixed(2)} EUR</div>
+              <div className="text-2xl font-bold font-mono text-white">{(activeCost.suggested_price || 0).toFixed(2)} EUR</div>
             </div>
           </div>
         </div>
