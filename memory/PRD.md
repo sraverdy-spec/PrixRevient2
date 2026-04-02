@@ -70,7 +70,6 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - Endpoint /api/data/reset : reinitialise toutes les collections (garde users + settings)
 - Endpoint /api/data/query : console MongoDB (find, count, aggregate, distinct)
 - Nouvel onglet "Base de donnees" dans Parametres avec seed, reset, console requetes
-- ZIP deploiement mis a jour
 
 ### Phase 15 - Renommage Clients + Types produit + Simulation versionnee + Photos (Complete - 2 Avril 2026)
 - Renommage "Fournisseurs" en "Clients" partout (frontend + seed)
@@ -80,9 +79,14 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - Photos recettes avec dimensions configurables (120x120 par defaut)
 - Correction bug texte blanc sur fond blanc pour anciennes recettes
 
-### Bugfix - code_article dans BOM Tree (Complete - 2 Avril 2026)
-- Corrige l'endpoint `/raw-materials` (inexistant) vers `/materials` dans BOMTree.jsx
-- Les codes articles (MAT-001, etc.) s'affichent maintenant correctement devant chaque matiere dans l'arbre BOM
+### Phase 16 - code_article sur Recettes (Complete - 2 Avril 2026)
+- Ajout champ `code_article` au modele Recipe (RecipeBase, RecipeUpdate)
+- Auto-generation codes REC-001, REC-002... a la creation
+- Migration automatique au demarrage pour recettes existantes sans code
+- Codes seed: REC-001 (Pate brisee) a REC-007 (Financier aux amandes)
+- Affichage code_article sur 3 pages: Arbre BOM, Recettes, Tableau des couts
+- Recherche par code_article dans Recettes et Tableau des couts
+- code_article inclus dans /api/reports/all-costs
 
 ## Credentials
 - Admin: admin@example.com / Admin123!
@@ -92,22 +96,22 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 ## Routes frontend
 - / : Dashboard (avec evolution prix + alertes)
 - /materials : Matieres premieres (avec code_article)
-- /recipes : Recettes (tableau par fournisseur)
+- /recipes : Recettes (avec code_article, tableau par client)
 - /recipes/:id : Detail recette (avec simulation live)
 - /overheads : Frais generaux
 - /suppliers : Clients (avec code)
 - /categories : Categories
-- /costs-table : Tableau des couts + Export Excel
+- /costs-table : Tableau des couts (avec code_article) + Export Excel
 - /comparison : Comparaison
-- /bom : Arbre de fabrication (avec code_article)
+- /bom : Arbre de fabrication (avec code_article recettes + matieres)
 - /simulation : Simulation what-if
 - /settings : Parametres (admin only, 8 onglets)
 
 ## DB Schema
 - raw_materials: {..., code_article}
+- recipes: {..., code_article, version, supplier_name, product_type, client}
 - suppliers: {..., code}
 - import_logs: {filename, type, status, user, error_details, timestamp, result}
-- recipes: {..., version, supplier_name, product_type, client}
 - api_keys: {key, name, created_by, is_active}
 - crontabs: {id, name, type, schedule, enabled, last_run, last_result, last_status, created_at}
 - price_history: {id, recipe_id, recipe_name, supplier_name, version, cost_per_unit, total_cost, recorded_at}

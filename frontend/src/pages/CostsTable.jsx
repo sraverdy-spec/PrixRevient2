@@ -60,7 +60,7 @@ const CostsTable = () => {
     if (filterClient !== "all" && (c.supplier_name || "") !== filterClient) return false;
     if (filterType !== "all" && (c.product_type || "") !== filterType) return false;
     if (filterCategory !== "all" && (c.category_id || "") !== filterCategory) return false;
-    if (searchQuery && !c.recipe_name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery && !c.recipe_name.toLowerCase().includes(searchQuery.toLowerCase()) && !(c.code_article || "").toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
@@ -130,7 +130,8 @@ const CostsTable = () => {
           <table className="data-table min-w-[1200px]">
             <thead>
               <tr className="bg-zinc-50">
-                <th className="sticky left-0 bg-zinc-50 z-10">Recette</th>
+                <th className="sticky left-0 bg-zinc-50 z-10 w-24">Code</th>
+                <th className="sticky left-[96px] bg-zinc-50 z-10">Recette</th>
                 <th>Client</th>
                 <th className="text-center">Type</th>
                 <th className="text-center">Ver.</th>
@@ -148,7 +149,12 @@ const CostsTable = () => {
             <tbody>
               {filteredCosts.map((cost, index) => (
                 <tr key={cost.recipe_id} className="hover:bg-zinc-50" data-testid={`cost-row-${index}`}>
-                  <td className="sticky left-0 bg-white z-10 font-medium border-r border-zinc-100">
+                  <td className="sticky left-0 bg-white z-10 border-r border-zinc-100">
+                    {cost.code_article ? (
+                      <span className="text-[11px] font-mono text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{cost.code_article}</span>
+                    ) : <span className="text-zinc-300">-</span>}
+                  </td>
+                  <td className="sticky left-[96px] bg-white z-10 font-medium border-r border-zinc-100">
                     {cost.recipe_name}
                   </td>
                   <td className="text-sm text-zinc-500">{cost.supplier_name || "-"}</td>
@@ -173,7 +179,8 @@ const CostsTable = () => {
             </tbody>
             <tfoot>
               <tr className="bg-zinc-100 font-bold">
-                <td className="sticky left-0 bg-zinc-100 z-10">TOTAUX</td>
+                <td className="sticky left-0 bg-zinc-100 z-10"></td>
+                <td className="sticky left-[96px] bg-zinc-100 z-10">TOTAUX</td>
                 <td></td>
                 <td></td>
                 <td></td>

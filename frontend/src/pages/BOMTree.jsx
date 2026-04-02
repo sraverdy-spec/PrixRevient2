@@ -155,6 +155,9 @@ export default function BOMTree() {
             ? <CookingPot size={18} className="text-white/80 shrink-0" />
             : <Cube size={15} className={r.is_intermediate ? "text-amber-500 shrink-0" : "text-[#002FA7] shrink-0"} />
           }
+          {r.code_article && (
+            <span className={"text-[10px] font-mono px-1 py-0.5 rounded shrink-0 " + (isRoot ? "bg-white/20 text-white/80" : "bg-zinc-100 text-zinc-400")}>{r.code_article}</span>
+          )}
           <span className={"font-semibold text-sm truncate " + (isRoot ? "text-white" : "")}>{r.name}</span>
 
           {r.is_intermediate && !isRoot && (

@@ -204,6 +204,7 @@ class OverheadCost(OverheadCostBase):
 class RecipeBase(BaseModel):
     name: str
     description: Optional[str] = None
+    code_article: Optional[str] = None
     category_id: Optional[str] = None
     supplier_id: Optional[str] = None
     supplier_name: Optional[str] = None
@@ -223,6 +224,7 @@ class RecipeCreate(RecipeBase):
 class RecipeUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    code_article: Optional[str] = None
     category_id: Optional[str] = None
     supplier_id: Optional[str] = None
     supplier_name: Optional[str] = None
@@ -743,6 +745,20 @@ async def get_recipe(recipe_id: str):
 @api_router.post("/recipes")
 async def create_recipe(input_data: RecipeCreate):
     recipe = Recipe(**input_data.model_dump())
+    # Auto-generate code_article if not provided
+    if not recipe.code_article:
+        all_codes = await db.recipes.find({"code_article": {"$exists": True, "$ne": None, "$ne": ""}}, {"_id": 0, "code_article": 1}).to_list(10000)
+        max_num = 0
+        for doc in all_codes:
+            code = doc.get("code_article", "")
+            if code.startswith("REC-"):
+                try:
+                    num = int(code.split("-")[1])
+                    if num > max_num:
+                        max_num = num
+                except (ValueError, IndexError):
+                    pass
+        recipe.code_article = f"REC-{max_num + 1:03d}"
     doc = recipe.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     doc['updated_at'] = doc['updated_at'].isoformat()
@@ -1283,6 +1299,7 @@ async def get_all_costs():
             results.append({
                 "recipe_id": recipe['id'],
                 "recipe_name": recipe['name'],
+                "code_article": recipe.get('code_article', ''),
                 "category_id": recipe.get('category_id'),
                 "supplier_name": recipe.get('supplier_name', ''),
                 "product_type": recipe.get('product_type', ''),
@@ -2588,7 +2605,7 @@ async def seed_data(admin: dict = Depends(require_admin)):
     if not await db.recipes.find_one({"name": "Pate brisee"}):
         pb_id = str(uuid.uuid4())
         await db.recipes.insert_one({
-            "id": pb_id, "name": "Pate brisee", "description": "Pate brisee classique pour tartes",
+            "id": pb_id, "name": "Pate brisee", "code_article": "REC-001", "description": "Pate brisee classique pour tartes",
             "category_id": cat_map.get("Farines & cereales", ""), "supplier_id": "", "supplier_name": "",
             "version": 1, "output_quantity": 1.0, "output_unit": "kg", "target_margin": 30.0,
             "is_intermediate": True,
@@ -2610,7 +2627,7 @@ async def seed_data(admin: dict = Depends(require_admin)):
     if not await db.recipes.find_one({"name": "Creme patissiere"}):
         cp_id = str(uuid.uuid4())
         await db.recipes.insert_one({
-            "id": cp_id, "name": "Creme patissiere", "description": "Creme patissiere vanille onctueuse",
+            "id": cp_id, "name": "Creme patissiere", "code_article": "REC-002", "description": "Creme patissiere vanille onctueuse",
             "category_id": cat_map.get("Produits laitiers", ""), "supplier_id": "", "supplier_name": "",
             "version": 1, "output_quantity": 1.0, "output_unit": "kg", "target_margin": 30.0,
             "is_intermediate": True,
@@ -2632,7 +2649,7 @@ async def seed_data(admin: dict = Depends(require_admin)):
     # --- Tarte aux pommes (final - uses Pate brisee) ---
     if not await db.recipes.find_one({"name": "Tarte aux pommes"}):
         await db.recipes.insert_one({
-            "id": str(uuid.uuid4()), "name": "Tarte aux pommes", "description": "Tarte aux pommes tradition avec pate brisee maison",
+            "id": str(uuid.uuid4()), "name": "Tarte aux pommes", "code_article": "REC-003", "description": "Tarte aux pommes tradition avec pate brisee maison",
             "category_id": cat_map.get("Fruits & legumes", ""), "supplier_id": sup_map.get("Auchan", ""), "supplier_name": "Auchan",
             "version": 1, "output_quantity": 8.0, "output_unit": "part", "target_margin": 35.0,
             "is_intermediate": False, "product_type": "MDD",
@@ -2654,7 +2671,7 @@ async def seed_data(admin: dict = Depends(require_admin)):
     # --- Eclair au chocolat (uses Creme patissiere) ---
     if not await db.recipes.find_one({"name": "Eclair au chocolat"}):
         await db.recipes.insert_one({
-            "id": str(uuid.uuid4()), "name": "Eclair au chocolat", "description": "Eclair garni de creme patissiere, glace chocolat",
+            "id": str(uuid.uuid4()), "name": "Eclair au chocolat", "code_article": "REC-004", "description": "Eclair garni de creme patissiere, glace chocolat",
             "category_id": cat_map.get("Chocolat & cacao", ""), "supplier_id": sup_map.get("Lidl", ""), "supplier_name": "Lidl",
             "version": 1, "output_quantity": 12.0, "output_unit": "piece", "target_margin": 40.0,
             "is_intermediate": False, "product_type": "MN",
@@ -2678,7 +2695,7 @@ async def seed_data(admin: dict = Depends(require_admin)):
     # --- Pain de campagne ---
     if not await db.recipes.find_one({"name": "Pain de campagne"}):
         await db.recipes.insert_one({
-            "id": str(uuid.uuid4()), "name": "Pain de campagne", "description": "Pain rustique au levain avec melange de farines",
+            "id": str(uuid.uuid4()), "name": "Pain de campagne", "code_article": "REC-005", "description": "Pain rustique au levain avec melange de farines",
             "category_id": cat_map.get("Farines & cereales", ""), "supplier_id": sup_map.get("Carrefour", ""), "supplier_name": "Carrefour",
             "version": 1, "output_quantity": 4.0, "output_unit": "piece", "target_margin": 25.0,
             "is_intermediate": False, "product_type": "SM",
@@ -2699,7 +2716,7 @@ async def seed_data(admin: dict = Depends(require_admin)):
     # --- Croissant au beurre ---
     if not await db.recipes.find_one({"name": "Croissant au beurre"}):
         await db.recipes.insert_one({
-            "id": str(uuid.uuid4()), "name": "Croissant au beurre", "description": "Croissant pur beurre feuillete",
+            "id": str(uuid.uuid4()), "name": "Croissant au beurre", "code_article": "REC-006", "description": "Croissant pur beurre feuillete",
             "category_id": cat_map.get("Produits laitiers", ""), "supplier_id": sup_map.get("Leclerc", ""), "supplier_name": "Leclerc",
             "version": 1, "output_quantity": 10.0, "output_unit": "piece", "target_margin": 45.0,
             "is_intermediate": False, "product_type": "MDD",
@@ -2724,7 +2741,7 @@ async def seed_data(admin: dict = Depends(require_admin)):
     # --- Financier aux amandes ---
     if not await db.recipes.find_one({"name": "Financier aux amandes"}):
         await db.recipes.insert_one({
-            "id": str(uuid.uuid4()), "name": "Financier aux amandes", "description": "Petit gateau moelleux aux amandes et beurre noisette",
+            "id": str(uuid.uuid4()), "name": "Financier aux amandes", "code_article": "REC-007", "description": "Petit gateau moelleux aux amandes et beurre noisette",
             "category_id": cat_map.get("Fruits & legumes", ""), "supplier_id": sup_map.get("Intermarche", ""), "supplier_name": "Intermarche",
             "version": 1, "output_quantity": 20.0, "output_unit": "piece", "target_margin": 50.0,
             "is_intermediate": False, "product_type": "MP",
@@ -3436,6 +3453,25 @@ async def startup_event():
             hashed = hash_password(admin_password)
             await db.users.insert_one({"email": admin_email, "password_hash": hashed, "name": "Admin", "role": "admin", "is_active": True, "created_at": datetime.now(timezone.utc)})
             logger.info(f"Admin user created: {admin_email}")
+    
+    # Migrate: auto-assign code_article to recipes that don't have one
+    recipes_without_code = await db.recipes.find({"$or": [{"code_article": {"$exists": False}}, {"code_article": None}, {"code_article": ""}]}, {"_id": 0, "id": 1}).to_list(10000)
+    if recipes_without_code:
+        all_codes = await db.recipes.find({"code_article": {"$exists": True, "$ne": None, "$ne": ""}}, {"_id": 0, "code_article": 1}).to_list(10000)
+        max_num = 0
+        for doc in all_codes:
+            code = doc.get("code_article", "")
+            if code.startswith("REC-"):
+                try:
+                    num = int(code.split("-")[1])
+                    if num > max_num:
+                        max_num = num
+                except (ValueError, IndexError):
+                    pass
+        for rdoc in recipes_without_code:
+            max_num += 1
+            await db.recipes.update_one({"id": rdoc["id"]}, {"$set": {"code_article": f"REC-{max_num:03d}"}})
+        logger.info(f"Migrated code_article for {len(recipes_without_code)} recipes")
     
     # Start background scheduler
     await sync_scheduler()

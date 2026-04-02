@@ -208,7 +208,7 @@ const Recipes = () => {
     if (filterSupplier !== "all" && (r.supplier_name || "") !== filterSupplier) return false;
     if (filterVersion !== "all" && (r.version || 1).toString() !== filterVersion) return false;
     if (filterProductType !== "all" && (r.product_type || "") !== filterProductType) return false;
-    if (searchQuery && !r.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery && !r.name.toLowerCase().includes(searchQuery.toLowerCase()) && !(r.code_article || "").toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
@@ -318,6 +318,7 @@ const Recipes = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-zinc-50 text-zinc-500 text-xs uppercase tracking-wider">
+                    <th className="text-left py-3 px-4 font-medium w-24">Code</th>
                     <th className="text-left py-3 px-4 font-medium">Recette</th>
                     <th className="text-center py-3 px-2 font-medium w-16">Version</th>
                     <th className="text-center py-3 px-2 font-medium w-20">Type</th>
@@ -333,6 +334,11 @@ const Recipes = () => {
                     const cost = recipeCosts[recipe.id];
                     return (
                       <tr key={recipe.id} className="hover:bg-zinc-50 transition-colors" data-testid={"recipe-row-" + index}>
+                        <td className="py-3 px-4">
+                          {recipe.code_article ? (
+                            <span className="text-[11px] font-mono text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{recipe.code_article}</span>
+                          ) : <span className="text-zinc-300">-</span>}
+                        </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-zinc-900">{recipe.name}</span>
