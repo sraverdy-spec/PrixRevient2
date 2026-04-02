@@ -79,7 +79,7 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - Photos recettes avec dimensions configurables (120x120 par defaut)
 - Correction bug texte blanc sur fond blanc pour anciennes recettes
 
-### Phase 16 - code_article sur Recettes (Complete - 2 Avril 2026)
+### Phase 16 - code_article sur Recettes + Mise a jour docs (Complete - 2 Avril 2026)
 - Ajout champ `code_article` au modele Recipe (RecipeBase, RecipeUpdate)
 - Auto-generation codes REC-001, REC-002... a la creation
 - Migration automatique au demarrage pour recettes existantes sans code
@@ -87,6 +87,10 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - Affichage code_article sur 3 pages: Arbre BOM, Recettes, Tableau des couts
 - Recherche par code_article dans Recettes et Tableau des couts
 - code_article inclus dans /api/reports/all-costs
+- Mise a jour MODELE_DONNEES.md : code_article + product_type recettes, renommage Clients, settings photo, AllCosts
+- Mise a jour DOCUMENTATION_METIER.md : section Administration, types produit, code article, simulation versionnee, photos
+- Regeneration PDF et DOCX pour les 3 documents
+- ZIP de deploiement mis a jour
 
 ## Credentials
 - Admin: admin@example.com / Admin123!
@@ -94,10 +98,10 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - Operateur: operator@example.com / Operator123!
 
 ## Routes frontend
-- / : Dashboard (avec evolution prix + alertes)
+- / : Dashboard (avec evolution prix + alertes + admin)
 - /materials : Matieres premieres (avec code_article)
 - /recipes : Recettes (avec code_article, tableau par client)
-- /recipes/:id : Detail recette (avec simulation live)
+- /recipes/:id : Detail recette (avec simulation live + photos)
 - /overheads : Frais generaux
 - /suppliers : Clients (avec code)
 - /categories : Categories
@@ -105,17 +109,18 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - /comparison : Comparaison
 - /bom : Arbre de fabrication (avec code_article recettes + matieres)
 - /simulation : Simulation what-if
-- /settings : Parametres (admin only, 8 onglets)
+- /settings : Parametres (admin only, 9 onglets dont Base de donnees)
 
 ## DB Schema
 - raw_materials: {..., code_article}
-- recipes: {..., code_article, version, supplier_name, product_type, client}
+- recipes: {..., code_article, version, supplier_name, product_type}
 - suppliers: {..., code}
 - import_logs: {filename, type, status, user, error_details, timestamp, result}
 - api_keys: {key, name, created_by, is_active}
 - crontabs: {id, name, type, schedule, enabled, last_run, last_result, last_status, created_at}
 - price_history: {id, recipe_id, recipe_name, supplier_name, version, cost_per_unit, total_cost, recorded_at}
 - price_history_materials: {id, material_id, material_name, unit_price, supplier_name, recorded_at}
+- settings: {..., recipe_photo_width, recipe_photo_height}
 
 ## Backlog
 - P2: Champ site_id sur recettes et matieres avec filtre par site

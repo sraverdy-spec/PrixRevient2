@@ -190,7 +190,7 @@ def md_to_pdf(md_path, pdf_path, title):
     pdf.cell(0, 10, 'PrixRevient - Calculateur de Prix de Revient', align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5)
     pdf.set_font('Liberation', 'I', 11)
-    pdf.cell(0, 10, 'Document généré le 1er avril 2026', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 10, 'Document généré le 2 avril 2026', align='C', new_x="LMARGIN", new_y="NEXT")
     
     # Content
     pdf.add_page()

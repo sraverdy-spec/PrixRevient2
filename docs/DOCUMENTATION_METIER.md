@@ -14,7 +14,8 @@
 7. [API KPI publique](#7-api-kpi-publique)
 8. [Taches planifiees (Scheduler)](#8-taches-planifiees-scheduler)
 9. [Simulation et analyse](#9-simulation-et-analyse)
-10. [Glossaire](#10-glossaire)
+10. [Administration](#10-administration)
+11. [Glossaire](#11-glossaire)
 
 ---
 
@@ -68,14 +69,13 @@ ingredient dans une recette parente.
 
 **Exemple :**
 ```
-Tarte aux pommes (produit fini)
-  |-- Pate brisee (sous-recette semi-finie)
-  |     |-- Farine (matiere premiere)
-  |     |-- Beurre (matiere premiere)
-  |     |-- Oeuf (matiere premiere)
-  |-- Compote de pommes (sous-recette semi-finie)
-  |     |-- Pommes (matiere premiere, freinte 12%)
-  |     |-- Sucre (matiere premiere)
+[REC-003] Tarte aux pommes (produit fini, MDD, Client: Auchan)
+  |-- [REC-001] Pate brisee (sous-recette semi-finie)
+  |     |-- [MAT-001] Farine (matiere premiere)
+  |     |-- [MAT-003] Beurre (matiere premiere)
+  |     |-- [MAT-005] Oeuf (matiere premiere)
+  |-- [MAT-008] Pommes Golden (matiere premiere, freinte 8%)
+  |-- [MAT-004] Sucre (matiere premiere)
   |-- Main d'oeuvre : Assemblage (0.5h x 15 EUR/h)
   |-- Frais generaux : Cuisson four (affecte)
 ```
@@ -83,7 +83,35 @@ Tarte aux pommes (produit fini)
 Le cout de chaque sous-recette est calcule recursivement, puis propage
 au produit fini.
 
-## 2.4 Marge et prix de vente
+## 2.4 Code article
+
+Chaque element dispose d'un code article unique pour faciliter
+l'identification rapide :
+
+| Element | Prefixe | Exemple |
+|---------|---------|---------|
+| Matiere premiere | MAT- | MAT-001, MAT-002 |
+| Recette | REC- | REC-001, REC-002 |
+| Client | CLI- | CLI-001, CLI-002 |
+
+Le code article des recettes est auto-genere a la creation (incrementiel).
+Il est affiche dans l'arbre BOM, le tableau des recettes et le tableau des
+couts.
+
+## 2.5 Types de produit
+
+Chaque recette (produit fini) peut etre associee a un type de produit :
+
+| Code | Signification | Couleur UI |
+|------|---------------|------------|
+| MDD | Marque De Distributeur | Bleu |
+| MN | Marque Nationale | Vert |
+| SM | Sans Marque | Gris |
+| MP | Marque Propre | Violet |
+
+Le type produit est utilise pour le filtrage et le reporting.
+
+## 2.6 Marge et prix de vente
 
 Le prix de vente conseille est calcule a partir du prix de revient et de la
 marge cible :
@@ -119,18 +147,21 @@ Catalogue des ingredients et matieres utilisees dans la production.
 **Regle :** Quand le prix unitaire d'une matiere est modifie, l'ancien
 prix est enregistre dans l'historique des prix matieres.
 
-## 3.2 Fournisseurs
+## 3.2 Clients
 
-Referentiel des fournisseurs de matieres premieres.
+Referentiel des clients auxquels sont associees les recettes.
 
 | Champ | Description | Obligatoire |
 |-------|-------------|:-----------:|
 | Nom | Raison sociale | Oui |
-| Code | Reference interne (ex: FRN-001) | Non |
+| Code | Reference interne (ex: CLI-001) | Non |
 | Contact | Nom du contact | Non |
 | Email | Adresse email | Non |
 | Telephone | Numero de telephone | Non |
 | Adresse | Adresse postale | Non |
+
+**Note :** Le terme "Client" remplace l'ancien terme "Fournisseur"
+dans le contexte des recettes de production.
 
 ## 3.3 Categories
 
@@ -158,13 +189,16 @@ Une recette represente un produit (fini ou semi-fini) avec ses composants.
 | Champ | Description | Obligatoire |
 |-------|-------------|:-----------:|
 | Nom | Nom du produit | Oui |
+| Code article | Reference interne auto-generee (ex: REC-001) | Auto |
 | Description | Details du produit | Non |
+| Type produit | MDD, MN, SM ou MP | Non |
 | Quantite produite | Nombre d'unites fabriquees par recette | Oui (defaut: 1) |
 | Unite de sortie | Unite du produit fini (piece, kg, L) | Oui |
 | Marge cible (%) | Marge souhaitee pour le calcul du prix de vente | Oui (defaut: 30) |
 | Semi-fini | Indique si c'est un article intermediaire reutilisable | Non (defaut: Non) |
-| Fournisseur | Fournisseur associe (pour variantes) | Non |
+| Client | Client associe (pour variantes) | Non |
 | Version | Numero de version (V1, V2, etc.) | Non |
+| Photo | Image du produit fini (dimensions configurables) | Non |
 
 ### Composition d'une recette
 
@@ -175,10 +209,10 @@ Une recette contient :
 3. **Main d'oeuvre** : description + heures + taux horaire
 4. **Frais generaux affectes** : selectionnes parmi le referentiel
 
-### Variantes fournisseur/version
+### Variantes client/version
 
-Une meme recette peut exister en plusieurs variantes (fournisseur different,
-version amelioree). Cela permet de comparer les couts d'approvisionnement.
+Une meme recette peut exister en plusieurs variantes (client different,
+version amelioree). Cela permet de comparer les couts de production.
 
 ## 3.6 Frais generaux
 
@@ -279,24 +313,24 @@ Prix de vente conseille = Prix revient / (1 - Marge% / 100)
 
 ### Exemple complet
 
-**Recette : Eclair au chocolat (production de 10 pieces)**
+**Recette : [REC-004] Eclair au chocolat (MN, Client: Lidl, 12 pieces)**
 
 | Composant | Detail | Cout |
 |-----------|--------|-----:|
-| Farine | 0.3 kg x 1.20 EUR/kg | 0.36 EUR |
-| Beurre | 0.15 kg x 8.50 EUR/kg | 1.28 EUR |
-| Oeufs | 4 pce x 0.25 EUR/pce | 1.00 EUR |
-| Chocolat | 0.2 kg x 12 EUR/kg, freinte 5% | 2.52 EUR |
-| Creme | 0.5 L x 3.80 EUR/L | 1.90 EUR |
-| **Total matieres** | | **7.06 EUR** |
-| Preparation | 1h x 15 EUR/h | 15.00 EUR |
-| Cuisson | 0.5h x 12 EUR/h | 6.00 EUR |
-| **Total MO** | | **21.00 EUR** |
-| Electricite four | 500 EUR / 200 unites | 2.50 EUR |
-| **Total frais** | | **2.50 EUR** |
-| **Cout total** | | **30.56 EUR** |
-| **Prix revient/piece** | 30.56 / 10 | **3.06 EUR** |
-| **Prix vente (marge 30%)** | 3.06 / 0.70 | **4.37 EUR** |
+| [MAT-001] Farine | 0.15 kg x 1.20 EUR/kg | 0.18 EUR |
+| [MAT-003] Beurre | 0.10 kg x 8.50 EUR/kg | 0.85 EUR |
+| [MAT-005] Oeufs | 4 pce x 0.28 EUR/pce | 1.12 EUR |
+| [REC-002] Creme patissiere | 0.5 kg (sous-recette) | ~7.47 EUR |
+| [MAT-010] Chocolat noir 70% | 0.15 kg x 12.50 EUR/kg | 1.88 EUR |
+| [MAT-011] Creme fraiche 35% | 0.10 L x 4.80 EUR/L | 0.48 EUR |
+| **Total matieres** | | **11.20 EUR** |
+| Pate a choux + pochage | 1h x 15 EUR/h | 15.00 EUR |
+| Glacage et assemblage | 0.5h x 15 EUR/h | 7.50 EUR |
+| **Total MO** | | **22.50 EUR** |
+| Frais generaux affectes | | **22.68 EUR** |
+| **Cout total** | | **56.39 EUR** |
+| **Prix revient/piece** | 56.39 / 12 | **4.70 EUR** |
+| **Prix vente (marge 40%)** | 4.70 / 0.60 | **7.83 EUR** |
 
 ---
 
@@ -312,13 +346,14 @@ L'application propose 3 niveaux d'acces :
 | Creer/modifier recettes | Oui | Oui | Oui |
 | Exporter PDF/Excel | Oui | Oui | Oui |
 | Importer CSV | Oui | Oui | Non |
-| Gerer les fournisseurs | Oui | Oui | Non |
+| Gerer les clients | Oui | Oui | Non |
 | Enregistrer historique prix | Oui | Oui | Non |
 | Parametres application | Oui | Non | Non |
 | Gestion des utilisateurs | Oui | Non | Non |
 | Gestion des cles API | Oui | Non | Non |
 | Taches planifiees | Oui | Non | Non |
 | Configuration SSO | Oui | Non | Non |
+| Console base de donnees | Oui | Non | Non |
 
 **Regle :** Seul l'administrateur peut creer de nouveaux comptes utilisateurs.
 L'inscription publique est desactivee.
@@ -343,11 +378,11 @@ Farine T55;kg;1.20;Moulin du Nord;2;50
 Beurre AOP;kg;8.50;Laiterie Dupont;0;20
 ```
 
-### Format CSV Fournisseurs
+### Format CSV Clients
 
 ```csv
 name;contact;email;phone;address
-Moulin du Nord;Jean Martin;contact@moulin.fr;0321456789;Lille
+Auchan;Jean Martin;contact@auchan.fr;0321456789;Lille
 ```
 
 ### Format CSV Categories
@@ -379,7 +414,7 @@ Les fichiers CSV deposes sont importes automatiquement selon leur prefixe :
 | `materials_*.csv` | Matieres premieres |
 | `recettes_*.csv` ou `recipes_*.csv` | Recettes simples |
 | `bom_*.csv` ou `arbre_*.csv` | Arbre de fabrication |
-| `suppliers_*.csv` ou `fournisseurs_*.csv` | Fournisseurs |
+| `suppliers_*.csv` ou `fournisseurs_*.csv` | Clients |
 | `categories_*.csv` | Categories |
 
 Apres traitement, les fichiers sont deplaces dans le sous-dossier `processed/`.
@@ -416,7 +451,7 @@ curl -H "X-API-Key: votre-cle" https://calculprix.appli-sciad.com/api/kpi/summar
 | `GET /api/kpi/recipes` | Liste des recettes avec couts calcules |
 | `GET /api/kpi/materials` | Liste des matieres premieres |
 | `GET /api/kpi/costs` | Tableau detaille des couts par recette |
-| `GET /api/kpi/categories` | Couts agrages par categorie |
+| `GET /api/kpi/categories` | Couts agreges par categorie |
 
 ## 7.3 Cas d'usage
 
@@ -489,23 +524,35 @@ mode d'edition temporaire.
 1. Cliquer sur "Simuler" dans la section Matieres premieres
 2. Les champs Quantite, Prix unitaire et Freinte deviennent editables
 3. Les champs Heures et Taux horaire de la main d'oeuvre aussi
-4. Les couts sont recalcules **en temps reel** dans les cartes du haut
-5. Les lignes modifiees sont surlignees en orange
-6. Un bandeau jaune indique "Mode simulation active"
-7. Cliquer sur "Reinitialiser" pour revenir aux valeurs reelles
-8. Cliquer sur "Quitter simulation" pour desactiver le mode
+4. Les semi-finis sont detailles et editables individuellement
+5. Les couts sont recalcules **en temps reel** dans les cartes du haut
+6. Les lignes modifiees sont surlignees en orange
+7. Un bandeau jaune indique "Mode simulation active"
+8. Cliquer sur "Reinitialiser" pour revenir aux valeurs reelles
+9. Cliquer sur "Quitter simulation" pour desactiver le mode
 
 **Regle importante :** Les modifications en mode simulation ne sont
 **jamais enregistrees** en base de donnees. C'est un outil d'analyse
 temporaire (what-if).
 
-## 9.3 Comparaison de recettes
+## 9.3 Sauvegarde de simulations
+
+Les simulations peuvent etre sauvegardees et rechargees ulterieurement
+via l'endpoint `POST /api/recipes/{id}/simulations`.
+
+Chaque simulation sauvegardee contient :
+- Un nom descriptif
+- Les changements de prix de matieres (material_changes)
+- La date de sauvegarde
+- Les resultats calcules (cout original, cout simule, ecart)
+
+## 9.4 Comparaison de recettes
 
 La page **Comparaison** permet de selectionner 2 recettes et d'afficher
 cote a cote leurs couts detailles (matieres, MO, frais, prix unitaire,
 prix de vente).
 
-## 9.4 Evolution des prix (Dashboard)
+## 9.5 Evolution des prix (Dashboard)
 
 Le graphique **"Evolution des prix de revient"** sur le tableau de bord
 affiche l'historique des prix de revient sur 90 jours, avec une courbe
@@ -514,7 +561,7 @@ par recette.
 **Prerequis :** Configurer une tache planifiee "Historique prix" pour
 capturer regulierement les snapshots de couts.
 
-## 9.5 Alertes prix matieres (Dashboard)
+## 9.6 Alertes prix matieres (Dashboard)
 
 Le panneau **"Alertes prix matieres"** affiche les matieres premieres
 dont le prix a varie au-dela du seuil configure (defaut : 10%).
@@ -525,7 +572,7 @@ dont le prix a varie au-dela du seuil configure (defaut : 10%).
 | Fleche verte vers le bas | Baisse de prix |
 | Pourcentage | Amplitude de la variation |
 
-## 9.6 Resume des couts (Arbre de fabrication)
+## 9.7 Resume des couts (Arbre de fabrication)
 
 Dans l'arbre de fabrication, le bouton **"Detail"** sur chaque recette
 ouvre un popup avec le resume complet des couts :
@@ -533,12 +580,45 @@ ouvre un popup avec le resume complet des couts :
 - Prix de revient unitaire, cout total, prix de vente conseille
 - Repartition par poste (matieres, main d'oeuvre, frais generaux)
   avec pourcentage du total et cout de la freinte
-- Detail de chaque matiere premiere, sous-recette et poste de MO
+- Detail de chaque matiere premiere (avec code_article), sous-recette et poste de MO
 - Quantite de production
 
 ---
 
-# 10. Glossaire
+# 10. Administration
+
+## 10.1 Tableau de bord administrateur
+
+Visible uniquement pour les administrateurs, la section Administration
+du tableau de bord affiche :
+
+- **4 KPIs** : Utilisateurs (par role), Imports (succes/erreur), Sites, Alertes stock
+- **Recettes par categorie** (graphique en barres)
+- **Derniers imports** (5 derniers avec statut)
+- **Taches planifiees** (avec dernier statut d'execution)
+
+## 10.2 Console base de donnees
+
+Accessible dans **Parametres > Base de donnees** (admin uniquement).
+
+| Fonctionnalite | Description |
+|----------------|-------------|
+| Jeu de donnees | Charge 8 categories, 6 clients, 18 matieres, 7 recettes, 5 frais, 6 unites |
+| Reinitialisation | Supprime toutes les donnees sauf utilisateurs et parametres |
+| Console requetes | Execute des requetes MongoDB (find, count, aggregate, distinct) |
+
+## 10.3 Photos de recettes
+
+Les recettes peuvent avoir une photo associee, affichee dans :
+- La page de detail de la recette
+- L'export PDF
+
+Les dimensions de la photo sont configurables dans **Parametres > Apparence**
+(defaut : 120 x 120 pixels).
+
+---
+
+# 11. Glossaire
 
 | Terme | Definition |
 |-------|------------|
@@ -554,7 +634,12 @@ ouvre un popup avec le resume complet des couts :
 | **Scheduler** | Planificateur de taches automatiques integre a l'application |
 | **SSO** | Single Sign-On - Authentification unique (Google / Microsoft) |
 | **SFTP** | Protocole de transfert de fichiers securise |
+| **MDD** | Marque De Distributeur |
+| **MN** | Marque Nationale |
+| **SM** | Sans Marque |
+| **MP** | Marque Propre |
+| **Code article** | Reference interne unique (MAT-xxx, REC-xxx, CLI-xxx) |
 
 ---
 
-*Document genere le 1er avril 2026 - PrixRevient v11*
+*Document genere le 2 avril 2026 - PrixRevient v16*

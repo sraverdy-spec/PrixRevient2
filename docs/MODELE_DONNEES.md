@@ -17,7 +17,7 @@
 # 1. Vue d'ensemble
 
 L'application utilise **MongoDB** comme base de donnees NoSQL.
-La base s'appelle `cost_calculator` et contient **13 collections**.
+La base s'appelle `cost_calculator` et contient **14 collections**.
 
 | Collection | Description | Volume estime |
 |------------|-------------|---------------|
@@ -25,7 +25,7 @@ La base s'appelle `cost_calculator` et contient **13 collections**.
 | raw_materials | Matieres premieres | 100 - 5 000 |
 | recipes | Recettes (finis + semi-finis) | 50 - 2 000 |
 | categories | Categories de matieres | 10 - 50 |
-| suppliers | Fournisseurs | 20 - 200 |
+| suppliers | Clients (anciennement fournisseurs) | 20 - 200 |
 | overheads | Frais generaux | 5 - 30 |
 | units | Unites de mesure | 10 - 30 |
 | sites | Sites de production | 1 - 10 |
@@ -52,8 +52,8 @@ La base s'appelle `cost_calculator` et contient **13 collections**.
 
 +------------+       +--------------+       +-------------+
 | categories |--1:N--| raw_materials|--N:1--| suppliers   |
-+------------+       +--------------+       +-------------+
-                           |
++------------+       +--------------+       | (= clients) |
+                           |                +-------------+
                      [ingredients]
                            |
                      +-----v------+       +-------------+
@@ -91,7 +91,7 @@ La base s'appelle `cost_calculator` et contient **13 collections**.
 | recipes.ingredients[].material_id -> raw_materials.id | N:1 | Chaque ingredient reference une matiere |
 | recipes.ingredients[].sub_recipe_id -> recipes.id | N:1 | Sous-recette (auto-reference) |
 | recipes.overhead_ids[] -> overheads.id | N:N | Frais generaux affectes |
-| recipes.supplier_id -> suppliers.id | N:1 | Fournisseur de la recette |
+| recipes.supplier_id -> suppliers.id | N:1 | Client de la recette |
 | recipes.category_id -> categories.id | N:1 | Categorie de la recette |
 | recipes.user_id -> users.email | N:1 | Createur de la recette |
 | raw_materials.supplier_id -> suppliers.id | N:1 | Fournisseur de la matiere |
@@ -157,7 +157,7 @@ Catalogue des matieres premieres.
 |-------|------|:------:|:------:|-------------|
 | id | string (UUID) | Auto | uuid4 | Identifiant unique |
 | name | string | Oui | - | Designation |
-| code_article | string | Non | null | Reference interne |
+| code_article | string | Non | null | Reference interne (ex: MAT-001) |
 | unit | string | Oui | - | Unite de mesure (kg, L, pce...) |
 | unit_price | float | Oui | - | Prix d'achat unitaire (EUR) |
 | supplier_id | string | Non | null | ID du fournisseur |
@@ -179,10 +179,12 @@ Recettes de fabrication (produits finis et semi-finis).
 {
   "id": "uuid-xxx",
   "name": "Tarte aux pommes",
+  "code_article": "REC-003",
   "description": "Tarte classique",
   "category_id": "uuid-category",
   "supplier_id": "uuid-supplier",
-  "supplier_name": "Boulangerie Martin",
+  "supplier_name": "Auchan",
+  "product_type": "MDD",
   "version": 1,
   "output_quantity": 8.0,
   "output_unit": "piece",
@@ -201,10 +203,12 @@ Recettes de fabrication (produits finis et semi-finis).
 |-------|------|:------:|:------:|-------------|
 | id | string (UUID) | Auto | uuid4 | Identifiant unique |
 | name | string | Oui | - | Nom du produit |
+| code_article | string | Auto | REC-XXX | Code article auto-genere (ex: REC-001) |
 | description | string | Non | null | Description |
 | category_id | string | Non | null | ID categorie |
-| supplier_id | string | Non | null | ID fournisseur |
-| supplier_name | string | Non | null | Nom fournisseur (denormalise) |
+| supplier_id | string | Non | null | ID client |
+| supplier_name | string | Non | null | Nom client (denormalise) |
+| product_type | string | Non | null | Type produit : MDD, MN, SM ou MP |
 | version | int | Non | 1 | Numero de version |
 | output_quantity | float | Non | 1.0 | Quantite produite par recette |
 | output_unit | string | Non | "piece" | Unite du produit fini |
@@ -216,6 +220,15 @@ Recettes de fabrication (produits finis et semi-finis).
 | user_id | string | Non | null | Email du createur |
 | created_at | datetime | Auto | now() | Date de creation |
 | updated_at | datetime | Auto | now() | Derniere modification |
+
+### Types de produit
+
+| Code | Signification |
+|------|---------------|
+| MDD | Marque De Distributeur |
+| MN | Marque Nationale |
+| SM | Sans Marque |
+| MP | Marque Propre |
 
 ---
 
@@ -241,19 +254,19 @@ Categories de matieres premieres et recettes.
 
 ---
 
-## 3.5 suppliers
+## 3.5 suppliers (Clients)
 
-Referentiel des fournisseurs.
+Referentiel des clients (anciennement fournisseurs).
 
 ```json
 {
   "id": "uuid-xxx",
-  "name": "Moulin du Nord",
-  "code": "FRN-001",
+  "name": "Auchan",
+  "code": "CLI-001",
   "contact": "Jean Martin",
-  "email": "contact@moulin.fr",
+  "email": "contact@auchan.fr",
   "phone": "0321456789",
-  "address": "12 rue des Meuniers, 59000 Lille",
+  "address": "12 rue du Commerce, 59000 Lille",
   "created_at": "2026-04-01T10:00:00Z"
 }
 ```
@@ -261,8 +274,8 @@ Referentiel des fournisseurs.
 | Champ | Type | Requis | Description |
 |-------|------|:------:|-------------|
 | id | string (UUID) | Auto | Identifiant unique |
-| name | string | Oui | Raison sociale |
-| code | string | Non | Code interne (ex: FRN-001) |
+| name | string | Oui | Raison sociale du client |
+| code | string | Non | Code interne (ex: CLI-001) |
 | contact | string | Non | Nom du contact |
 | email | string | Non | Adresse email |
 | phone | string | Non | Telephone |
@@ -424,7 +437,7 @@ Historique des prix de revient des recettes (snapshots).
   "id": "uuid-xxx",
   "recipe_id": "uuid-recipe",
   "recipe_name": "Tarte aux pommes",
-  "supplier_name": "Boulangerie Martin",
+  "supplier_name": "Auchan",
   "version": "1",
   "cost_per_unit": 3.06,
   "total_cost": 30.56,
@@ -437,7 +450,7 @@ Historique des prix de revient des recettes (snapshots).
 | id | string (UUID) | Auto | Identifiant unique |
 | recipe_id | string | Oui | ID de la recette |
 | recipe_name | string | Oui | Nom de la recette (denormalise) |
-| supplier_name | string | Non | Fournisseur (denormalise) |
+| supplier_name | string | Non | Client (denormalise) |
 | version | string | Non | Version de la recette |
 | cost_per_unit | float | Oui | Prix de revient unitaire |
 | total_cost | float | Oui | Cout total de production |
@@ -512,6 +525,8 @@ Parametres globaux de l'application (document unique).
   "currency": "EUR",
   "default_margin": 30.0,
   "price_alert_threshold": 10.0,
+  "recipe_photo_width": 120,
+  "recipe_photo_height": 120,
   "sso_google_enabled": false,
   "sso_google_client_id": "",
   "sso_google_client_secret": "",
@@ -531,6 +546,8 @@ Parametres globaux de l'application (document unique).
 | currency | string | Devise (EUR, USD...) |
 | default_margin | float | Marge par defaut (%) |
 | price_alert_threshold | float | Seuil d'alerte prix (%) |
+| recipe_photo_width | int | Largeur photo recette (px, defaut 120) |
+| recipe_photo_height | int | Hauteur photo recette (px, defaut 120) |
 | sso_google_enabled | bool | Google SSO actif |
 | sso_google_client_id | string | OAuth Client ID Google |
 | sso_google_client_secret | string | OAuth Client Secret Google |
@@ -617,7 +634,7 @@ Endpoint : `GET /api/recipes/{id}/cost`
   "target_margin": 30.0,
   "suggested_price": 4.37,
   "material_details": [
-    { "name": "Farine", "quantity": 0.3, "unit": "kg", "unit_cost": 1.20, "total_cost": 0.36, "freinte_cost": 0.01 }
+    { "name": "Farine", "code_article": "MAT-001", "quantity": 0.3, "unit": "kg", "unit_cost": 1.20, "total_cost": 0.36, "freinte_cost": 0.01 }
   ],
   "labor_details": [
     { "description": "Preparation", "hours": 1.5, "hourly_rate": 15.0, "total_cost": 22.50 }
@@ -631,7 +648,34 @@ Endpoint : `GET /api/recipes/{id}/cost`
 }
 ```
 
-## 5.2 SimulationResult
+## 5.2 AllCosts (Tableau des couts)
+
+Vue tabulaire de tous les couts par recette.
+Endpoint : `GET /api/reports/all-costs`
+
+```json
+{
+  "recipe_id": "uuid-xxx",
+  "recipe_name": "Tarte aux pommes",
+  "code_article": "REC-003",
+  "category_id": "uuid-category",
+  "supplier_name": "Auchan",
+  "product_type": "MDD",
+  "version": 1,
+  "output_quantity": 8.0,
+  "output_unit": "part",
+  "material_cost": 7.07,
+  "labor_cost": 18.75,
+  "overhead_cost": 2.06,
+  "freinte_cost": 0.19,
+  "total_cost": 27.88,
+  "cost_per_unit": 3.49,
+  "target_margin": 35.0,
+  "suggested_price": 5.36
+}
+```
+
+## 5.3 SimulationResult
 
 Resultat d'une simulation what-if.
 Endpoint : `POST /api/simulate`
@@ -656,8 +700,11 @@ Endpoint : `POST /api/simulate`
 |------------|----------|------|--------|
 | users | email | Unique | Authentification rapide |
 | raw_materials | id | Unique | Recherche par ID |
+| raw_materials | code_article | Standard | Recherche par code article |
 | recipes | id | Unique | Recherche par ID |
+| recipes | code_article | Standard | Recherche par code article |
 | recipes | is_intermediate | Standard | Filtrage semi-finis |
+| recipes | product_type | Standard | Filtrage par type produit |
 | categories | id | Unique | Recherche par ID |
 | suppliers | id | Unique | Recherche par ID |
 | overheads | id | Unique | Recherche par ID |
@@ -670,4 +717,4 @@ Endpoint : `POST /api/simulate`
 
 ---
 
-*Document genere le 1er avril 2026 - PrixRevient v11*
+*Document genere le 2 avril 2026 - PrixRevient v16*
