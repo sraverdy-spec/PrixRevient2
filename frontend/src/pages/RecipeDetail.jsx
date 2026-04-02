@@ -212,6 +212,21 @@ const RecipeDetail = () => {
   const resetSim = () => { setSimIngredients({}); setSimLabor({}); };
   const hasSimChanges = Object.keys(simIngredients).length > 0 || Object.keys(simLabor).length > 0;
 
+  // Helper for sub-recipe sim values
+  const getSimSubValue = (subIndex, field, original) => {
+    const key = `sub_${subIndex}`;
+    if (simIngredients[key] && simIngredients[key][field] !== undefined) return simIngredients[key][field];
+    return original;
+  };
+  const updateSimSub = (subIndex, field, value) => {
+    const key = `sub_${subIndex}`;
+    setSimIngredients(prev => ({ ...prev, [key]: { ...prev[key], [field]: parseFloat(value) || 0 } }));
+  };
+  const isSubModified = (subIndex) => {
+    const key = `sub_${subIndex}`;
+    return simIngredients[key] && Object.keys(simIngredients[key]).length > 0;
+  };
+
   const handleSaveSimVersion = async () => {
     if (!hasSimChanges) { toast.error("Aucune modification a sauvegarder"); return; }
     const costSummary = computeSimCost();
@@ -250,10 +265,39 @@ const RecipeDetail = () => {
     const ingredients = recipe.ingredients || [];
     let totalMatCost = 0;
     let totalFreinte = 0;
+    let subIdx = 0;
     ingredients.forEach((ing, i) => {
       if (ing.is_sub_recipe) {
         const sub = costBreakdown?.sub_recipe_details?.find(s => s.name === ing.material_name);
-        totalMatCost += sub ? sub.total_cost : 0;
+        if (sub) {
+          // Allow simulating sub-recipe quantity
+          const simQty = getSimSubValue(subIdx, "quantity", ing.quantity);
+          const unitCost = sub.unit_cost || (sub.total_cost / ing.quantity);
+          totalMatCost += simQty * unitCost;
+
+          // Allow simulating individual sub-recipe materials
+          if (sub.ingredients) {
+            let subMatCost = 0;
+            sub.ingredients.forEach((subIng, si) => {
+              if (!subIng.is_sub_recipe) {
+                const subIngKey = `sub_${subIdx}_mat_${si}`;
+                const qty = simIngredients[subIngKey]?.quantity ?? subIng.quantity;
+                const price = simIngredients[subIngKey]?.unit_price ?? subIng.unit_price;
+                const freinte = simIngredients[subIngKey]?.freinte ?? (subIng.freinte || 0);
+                const base = qty * price;
+                subMatCost += base + base * freinte / 100;
+              }
+            });
+            // If user modified sub-materials, recalculate based on those
+            const hasSubMatChanges = sub.ingredients.some((_, si) => simIngredients[`sub_${subIdx}_mat_${si}`]);
+            if (hasSubMatChanges) {
+              // Replace the calculated total with new simulation total
+              totalMatCost -= simQty * unitCost;
+              totalMatCost += subMatCost * (simQty / ing.quantity);
+            }
+          }
+        }
+        subIdx++;
       } else {
         const rawIdx = ingredients.filter((x, j) => j < i && !x.is_sub_recipe).length;
         const qty = getSimIngValue(rawIdx, "quantity", ing.quantity);
@@ -379,12 +423,12 @@ const RecipeDetail = () => {
       {/* Cost Summary Cards */}
       {activeCost && (
         <div className="mb-8">
-          {hasSimChanges && (
+          {simMode && (
             <div className="flex flex-col gap-2 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-amber-800">
                   <PencilSimple size={18} />
-                  <span className="text-sm font-medium">Mode simulation active — Les valeurs ci-dessous sont recalculees en temps reel</span>
+                  <span className="text-sm font-medium">Mode simulation active — Modifiez les valeurs pour recalculer en temps reel</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button size="sm" variant="outline" onClick={() => setShowSimVersions(!showSimVersions)} className="border-amber-300 text-amber-700 hover:bg-amber-100" data-testid="toggle-sim-versions-btn">
@@ -399,7 +443,8 @@ const RecipeDetail = () => {
               <div className="flex items-center gap-2 mt-1">
                 <Input placeholder="Nom de la version (optionnel)" value={simLabel} onChange={e => setSimLabel(e.target.value)}
                   className="h-8 text-sm flex-1 max-w-xs" data-testid="sim-label-input" />
-                <Button size="sm" onClick={handleSaveSimVersion} className="bg-amber-600 hover:bg-amber-700 h-8" data-testid="save-sim-btn">
+                <Button size="sm" onClick={handleSaveSimVersion} disabled={!hasSimChanges}
+                  className="bg-amber-600 hover:bg-amber-700 h-8 disabled:opacity-50" data-testid="save-sim-btn">
                   <FloppyDisk size={14} className="mr-1" /> Sauvegarder cette version
                 </Button>
               </div>
@@ -593,19 +638,33 @@ const RecipeDetail = () => {
               <div className="p-4 space-y-3" data-testid="sub-recipes-list">
                 {subRecipeIngredients.map((ing, index) => {
                   const subDetail = costBreakdown?.sub_recipe_details?.find(s => s.name === ing.material_name);
+                  const simQty = simMode ? getSimSubValue(index, "quantity", ing.quantity) : ing.quantity;
+                  const subModified = isSubModified(index);
                   return (
-                    <div key={index} className="bg-amber-50 rounded-lg border border-amber-100 overflow-hidden" data-testid={`sub-recipe-row-${index}`}>
+                    <div key={index} className={`rounded-lg border overflow-hidden ${subModified ? "bg-amber-50 border-amber-300" : "bg-amber-50 border-amber-100"}`} data-testid={`sub-recipe-row-${index}`}>
                       <div className="flex items-center justify-between p-3">
                         <div className="flex items-center gap-3">
                           <TreeStructure size={16} className="text-amber-600" />
                           <div>
                             <p className="font-medium text-zinc-900">{ing.material_name}</p>
-                            <p className="text-xs text-zinc-500">{ing.quantity} {ing.unit}</p>
+                            {simMode ? (
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <input type="number" step="0.01"
+                                  value={simQty} onChange={e => updateSimSub(index, "quantity", e.target.value)}
+                                  className={`w-20 h-6 text-xs font-mono border rounded px-1 text-center ${subModified ? "border-amber-400 bg-amber-50" : "border-zinc-300"}`}
+                                />
+                                <span className="text-xs text-zinc-500">{ing.unit}</span>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-zinc-500">{ing.quantity} {ing.unit}</p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
                           {subDetail && (
-                            <span className="font-mono font-semibold text-amber-700">{subDetail.total_cost.toFixed(2)} EUR</span>
+                            <span className={`font-mono font-semibold ${subModified ? "text-blue-700" : "text-amber-700"}`}>
+                              {simMode ? (simQty * (subDetail.unit_cost || (subDetail.total_cost / ing.quantity))).toFixed(2) : subDetail.total_cost.toFixed(2)} EUR
+                            </span>
                           )}
                           <button onClick={() => handleRemoveIngredient((recipe.ingredients || []).indexOf(ing))} className="p-1 hover:bg-red-50 rounded">
                             <Trash size={14} className="text-red-500" />
@@ -627,18 +686,55 @@ const RecipeDetail = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {subDetail.ingredients.map((subIng, si) => (
-                                <tr key={si} className="border-t border-amber-100/50">
-                                  <td className="py-1 text-zinc-700">
-                                    {subIng.is_sub_recipe && <TreeStructure size={10} className="inline mr-1 text-amber-500" />}
-                                    {subIng.name}
-                                  </td>
-                                  <td className="text-right py-1 font-mono text-zinc-600">{subIng.quantity} {subIng.unit}</td>
-                                  <td className="text-right py-1 font-mono text-zinc-600">{subIng.is_sub_recipe ? "-" : `${(subIng.unit_price || 0).toFixed(2)}`}</td>
-                                  <td className="text-right py-1">{subIng.freinte > 0 ? <span className="text-red-500">{subIng.freinte}%</span> : "-"}</td>
-                                  <td className="text-right py-1 font-mono font-medium text-zinc-800">{subIng.total_cost.toFixed(2)} EUR</td>
-                                </tr>
-                              ))}
+                              {subDetail.ingredients.map((subIng, si) => {
+                                const subMatKey = `sub_${index}_mat_${si}`;
+                                const subMatModified = simIngredients[subMatKey];
+                                const sQty = simMode && !subIng.is_sub_recipe ? (simIngredients[subMatKey]?.quantity ?? subIng.quantity) : subIng.quantity;
+                                const sPrice = simMode && !subIng.is_sub_recipe ? (simIngredients[subMatKey]?.unit_price ?? subIng.unit_price) : (subIng.unit_price || 0);
+                                const sFreinte = simMode && !subIng.is_sub_recipe ? (simIngredients[subMatKey]?.freinte ?? (subIng.freinte || 0)) : (subIng.freinte || 0);
+                                const sBase = sQty * sPrice;
+                                const sTotal = sBase + sBase * sFreinte / 100;
+                                return (
+                                  <tr key={si} className={`border-t border-amber-100/50 ${subMatModified ? "bg-amber-50/80" : ""}`}>
+                                    <td className="py-1 text-zinc-700">
+                                      {subIng.is_sub_recipe && <TreeStructure size={10} className="inline mr-1 text-amber-500" />}
+                                      {subIng.name}
+                                    </td>
+                                    <td className="text-right py-1">
+                                      {simMode && !subIng.is_sub_recipe ? (
+                                        <input type="number" step="0.01" value={sQty}
+                                          onChange={e => setSimIngredients(prev => ({ ...prev, [subMatKey]: { ...prev[subMatKey], quantity: parseFloat(e.target.value) || 0 } }))}
+                                          className={`w-16 h-5 text-[11px] font-mono border rounded px-1 text-right ${subMatModified ? "border-amber-400 bg-amber-50" : "border-zinc-300"}`}
+                                        />
+                                      ) : (
+                                        <span className="font-mono text-zinc-600">{subIng.quantity}</span>
+                                      )}
+                                      <span className="text-zinc-400 ml-0.5">{subIng.unit}</span>
+                                    </td>
+                                    <td className="text-right py-1">
+                                      {simMode && !subIng.is_sub_recipe ? (
+                                        <input type="number" step="0.01" value={sPrice}
+                                          onChange={e => setSimIngredients(prev => ({ ...prev, [subMatKey]: { ...prev[subMatKey], unit_price: parseFloat(e.target.value) || 0 } }))}
+                                          className={`w-16 h-5 text-[11px] font-mono border rounded px-1 text-right ${subMatModified ? "border-amber-400 bg-amber-50" : "border-zinc-300"}`}
+                                        />
+                                      ) : (
+                                        <span className="font-mono text-zinc-600">{subIng.is_sub_recipe ? "-" : sPrice.toFixed(2)}</span>
+                                      )}
+                                    </td>
+                                    <td className="text-right py-1">
+                                      {simMode && !subIng.is_sub_recipe ? (
+                                        <input type="number" step="0.1" value={sFreinte}
+                                          onChange={e => setSimIngredients(prev => ({ ...prev, [subMatKey]: { ...prev[subMatKey], freinte: parseFloat(e.target.value) || 0 } }))}
+                                          className={`w-14 h-5 text-[11px] font-mono border rounded px-1 text-right ${subMatModified ? "border-amber-400 bg-amber-50" : "border-zinc-300"}`}
+                                        />
+                                      ) : (
+                                        sFreinte > 0 ? <span className="text-red-500">{sFreinte}%</span> : <span>-</span>
+                                      )}
+                                    </td>
+                                    <td className={`text-right py-1 font-mono font-medium ${subMatModified ? "text-blue-700" : "text-zinc-800"}`}>{sTotal.toFixed(2)} EUR</td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                           {subDetail.labor_cost > 0 && (
