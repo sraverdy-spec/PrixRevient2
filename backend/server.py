@@ -822,8 +822,11 @@ async def calculate_sub_recipe_cost(recipe_id: str, depth: int = 0) -> dict:
             freinte_add = base_cost * freinte_pct
             cost = base_cost + freinte_add
             freinte_cost += freinte_add
+            # Lookup code_article for sub-recipe material
+            sub_mat_doc = await db.raw_materials.find_one({"id": ing.get('material_id')}, {"_id": 0, "code_article": 1})
             ingredients_detail.append({
-                "name": ing['material_name'], "quantity": ing['quantity'], "unit": ing.get('unit', ''),
+                "name": ing['material_name'], "code_article": sub_mat_doc.get('code_article', '') if sub_mat_doc else '',
+                "quantity": ing['quantity'], "unit": ing.get('unit', ''),
                 "unit_price": ing['unit_price'], "freinte": ing.get('freinte', 0),
                 "is_sub_recipe": False, "total_cost": round(cost, 2),
             })

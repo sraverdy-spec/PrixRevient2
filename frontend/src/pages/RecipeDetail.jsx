@@ -42,6 +42,10 @@ const RecipeDetail = () => {
   const [subRecipeForm, setSubRecipeForm] = useState({ sub_recipe_id: "", quantity: "", unit: "unite" });
   const [laborForm, setLaborForm] = useState({ description: "", hours: "", hourly_rate: "" });
   const [selectedOverheads, setSelectedOverheads] = useState([]);
+  const getMatCode = (materialId) => {
+    const m = materials.find(x => x.id === materialId);
+    return m?.code_article || "";
+  };
   // Simulation en ligne : modifications temporaires
   const [simMode, setSimMode] = useState(false);
   const [simIngredients, setSimIngredients] = useState({});
@@ -574,8 +578,8 @@ const RecipeDetail = () => {
                     return (
                       <tr key={index} className={modified ? "bg-amber-50" : ""} data-testid={`ingredient-row-${index}`}>
                         <td className="font-medium">
+                          {getMatCode(ing.material_id) && <span className="text-[10px] font-mono text-zinc-400 bg-zinc-100 px-1 py-0.5 rounded mr-1.5">{getMatCode(ing.material_id)}</span>}
                           {ing.material_name}
-                          {ing.code_article && <span className="text-xs text-zinc-400 ml-1">({ing.code_article})</span>}
                         </td>
                         <td className="text-right">
                           {simMode ? (
@@ -701,6 +705,7 @@ const RecipeDetail = () => {
                                   <tr key={si} className={`border-t border-amber-100/50 ${subMatModified ? "bg-amber-50/80" : ""}`}>
                                     <td className="py-1 text-zinc-700">
                                       {subIng.is_sub_recipe && <TreeStructure size={10} className="inline mr-1 text-amber-500" />}
+                                      {subIng.code_article && <span className="text-[10px] font-mono text-zinc-400 bg-zinc-100 px-1 py-0.5 rounded mr-1">{subIng.code_article}</span>}
                                       {subIng.name}
                                     </td>
                                     <td className="text-right py-1">
@@ -972,7 +977,7 @@ const RecipeDetail = () => {
                   <SelectContent>
                     {materials.map((mat) => (
                       <SelectItem key={mat.id} value={mat.id}>
-                        {mat.name} ({mat.unit_price.toFixed(2)} EUR/{mat.unit})
+                        {mat.code_article && `[${mat.code_article}] `}{mat.name} ({mat.unit_price.toFixed(2)} EUR/{mat.unit})
                         {mat.freinte > 0 && ` [F:${mat.freinte}%]`}
                       </SelectItem>
                     ))}
