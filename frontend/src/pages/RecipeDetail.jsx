@@ -52,6 +52,7 @@ const RecipeDetail = () => {
   const [showSimVersions, setShowSimVersions] = useState(false);
   // Photo
   const [recipeImage, setRecipeImage] = useState(null);
+  const [appSettings, setAppSettings] = useState({ recipe_image_width: 120, recipe_image_height: 120 });
 
   const fetchRecipe = useCallback(async () => {
     try {
@@ -86,7 +87,9 @@ const RecipeDetail = () => {
 
   useEffect(() => {
     const load = async () => {
-      await Promise.all([fetchRecipe(), fetchMaterials(), fetchOverheads(), fetchIntermediateRecipes(), fetchSimVersions()]);
+      await Promise.all([fetchRecipe(), fetchMaterials(), fetchOverheads(), fetchIntermediateRecipes(), fetchSimVersions(),
+        axios.get(`${API}/settings`).then(r => setAppSettings(s => ({ ...s, ...r.data }))).catch(() => {}),
+      ]);
       await fetchCostBreakdown();
       setLoading(false);
     };
@@ -848,10 +851,12 @@ const RecipeDetail = () => {
           {/* Recipe Photo */}
           <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden" data-testid="recipe-photo-section">
             {(recipe.image_url || recipeImage) ? (
-              <div className="relative group">
+              <div className="relative group flex items-center justify-center p-3">
                 <img src={`${(recipe.image_url || recipeImage).startsWith('/api') ? process.env.REACT_APP_BACKEND_URL : ''}${recipe.image_url || recipeImage}`}
-                  alt={recipe.name} className="w-full h-48 object-cover" />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
+                  alt={recipe.name}
+                  style={{ width: appSettings.recipe_image_width || 120, height: appSettings.recipe_image_height || 120 }}
+                  className="object-cover rounded-lg" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2 rounded-lg">
                   <label className="cursor-pointer px-3 py-1.5 bg-white rounded-lg text-xs font-medium text-zinc-800 hover:bg-zinc-100">
                     <Camera size={14} className="inline mr-1" /> Changer
                     <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
@@ -860,9 +865,9 @@ const RecipeDetail = () => {
                 </div>
               </div>
             ) : (
-              <div className="p-6 text-center">
-                <Camera size={32} className="mx-auto mb-2 text-zinc-300" />
-                <p className="text-sm text-zinc-500 mb-3">Photo de l'article fini</p>
+              <div className="p-4 text-center">
+                <Camera size={24} className="mx-auto mb-2 text-zinc-300" />
+                <p className="text-xs text-zinc-500 mb-2">Photo article fini</p>
                 <div className="flex items-center justify-center gap-2">
                   <label className="cursor-pointer px-3 py-1.5 bg-zinc-100 rounded-lg text-xs font-medium text-zinc-700 hover:bg-zinc-200" data-testid="upload-photo-btn">
                     <Camera size={14} className="inline mr-1" /> Importer

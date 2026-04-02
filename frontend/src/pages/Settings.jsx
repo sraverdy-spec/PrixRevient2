@@ -354,6 +354,23 @@ export default function Settings() {
                     </div>
                   )}
                 </div>
+                <div className="space-y-2 pt-2 border-t border-zinc-100">
+                  <Label>Taille photo recette (px)</Label>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <Label className="text-xs text-zinc-500">L</Label>
+                      <Input type="number" className="w-20 h-8 text-sm" value={settings.recipe_image_width || 120}
+                        onChange={e => setSettings({ ...settings, recipe_image_width: parseInt(e.target.value) || 120 })} data-testid="recipe-img-width" />
+                    </div>
+                    <span className="text-zinc-400">x</span>
+                    <div className="flex items-center gap-1">
+                      <Label className="text-xs text-zinc-500">H</Label>
+                      <Input type="number" className="w-20 h-8 text-sm" value={settings.recipe_image_height || 120}
+                        onChange={e => setSettings({ ...settings, recipe_image_height: parseInt(e.target.value) || 120 })} data-testid="recipe-img-height" />
+                    </div>
+                    <span className="text-xs text-zinc-400">px</span>
+                  </div>
+                </div>
               </div>
             </div>
 
