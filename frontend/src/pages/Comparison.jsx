@@ -144,7 +144,7 @@ const Comparison = () => {
               <thead>
                 <tr>
                   <th>Recette</th>
-                  <th>Fournisseur</th>
+                  <th>Client</th>
                   <th className="text-center">Version</th>
                   <th className="text-right">Matières</th>
                   <th className="text-right">Main d'œuvre</th>

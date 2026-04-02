@@ -25,7 +25,7 @@ export default function ImportCenter() {
     materials:   { label: "Matieres premieres",       template: "/materials/csv-template",      templateName: "template_matieres.csv" },
     recipes:     { label: "Recettes simples",          template: "/recipes/csv-template",        templateName: "template_recettes.csv" },
     bom:         { label: "Arbre de fabrication (BOM)", template: "/recipes/bom-csv-template",   templateName: "template_bom.csv" },
-    suppliers:   { label: "Fournisseurs",              template: "/suppliers/csv-template",      templateName: "template_fournisseurs.csv" },
+    suppliers:   { label: "Clients",                   template: "/suppliers/csv-template",      templateName: "template_clients.csv" },
     categories:  { label: "Categories",                template: "/categories/csv-template",     templateName: "template_categories.csv" },
   };
 
@@ -240,8 +240,8 @@ export default function ImportCenter() {
                   <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-lg">
                     <FileText size={18} className="text-purple-500 shrink-0" />
                     <div className="flex-1">
-                      <p className="font-mono text-sm font-medium">suppliers_*.csv / fournisseurs_*.csv</p>
-                      <p className="text-xs text-zinc-500">Import de fournisseurs</p>
+                      <p className="font-mono text-sm font-medium">suppliers_*.csv / clients_*.csv</p>
+                      <p className="text-xs text-zinc-500">Import de clients</p>
                     </div>
                     <a href={API + "/suppliers/csv-template"} download className="inline-flex items-center gap-1 text-xs text-purple-500 hover:underline border border-purple-500/20 rounded px-2 py-1 bg-white shrink-0" data-testid="sftp-template-suppliers">
                       <DownloadSimple size={12} /> Modele

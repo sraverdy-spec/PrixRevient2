@@ -207,6 +207,7 @@ class RecipeBase(BaseModel):
     category_id: Optional[str] = None
     supplier_id: Optional[str] = None
     supplier_name: Optional[str] = None
+    product_type: Optional[str] = None  # MDD, MN, SM, MP
     version: int = 1
     output_quantity: float = 1.0
     output_unit: str = "pièce"
@@ -225,6 +226,7 @@ class RecipeUpdate(BaseModel):
     category_id: Optional[str] = None
     supplier_id: Optional[str] = None
     supplier_name: Optional[str] = None
+    product_type: Optional[str] = None
     version: Optional[int] = None
     output_quantity: Optional[float] = None
     output_unit: Optional[str] = None
@@ -789,16 +791,17 @@ async def duplicate_recipe(recipe_id: str):
 async def calculate_sub_recipe_cost(recipe_id: str, depth: int = 0) -> dict:
     """Recursively calculate cost for sub-recipes (BOM)"""
     if depth > 10:  # Prevent infinite recursion
-        return {"cost": 0, "details": []}
+        return {"cost": 0, "details": [], "ingredients": []}
     
     recipe = await db.recipes.find_one({"id": recipe_id}, {"_id": 0})
     if not recipe:
-        return {"cost": 0, "details": []}
+        return {"cost": 0, "details": [], "ingredients": []}
     
     total_cost = 0
     material_cost = 0
     labor_cost = 0
     freinte_cost = 0
+    ingredients_detail = []
     
     # Calculate material costs including freinte
     for ing in recipe.get('ingredients', []):
@@ -806,12 +809,22 @@ async def calculate_sub_recipe_cost(recipe_id: str, depth: int = 0) -> dict:
             # Recursive call for sub-recipe
             sub_cost = await calculate_sub_recipe_cost(ing['sub_recipe_id'], depth + 1)
             cost = ing['quantity'] * sub_cost['cost']
+            ingredients_detail.append({
+                "name": ing['material_name'], "quantity": ing['quantity'], "unit": ing.get('unit', ''),
+                "is_sub_recipe": True, "total_cost": round(cost, 2),
+                "sub_ingredients": sub_cost.get('ingredients', []),
+            })
         else:
             base_cost = ing['quantity'] * ing['unit_price']
             freinte_pct = ing.get('freinte', 0) / 100
             freinte_add = base_cost * freinte_pct
             cost = base_cost + freinte_add
             freinte_cost += freinte_add
+            ingredients_detail.append({
+                "name": ing['material_name'], "quantity": ing['quantity'], "unit": ing.get('unit', ''),
+                "unit_price": ing['unit_price'], "freinte": ing.get('freinte', 0),
+                "is_sub_recipe": False, "total_cost": round(cost, 2),
+            })
         material_cost += cost
     
     # Calculate labor costs
@@ -825,7 +838,8 @@ async def calculate_sub_recipe_cost(recipe_id: str, depth: int = 0) -> dict:
         "cost": total_cost / output_qty,
         "material_cost": material_cost,
         "labor_cost": labor_cost,
-        "freinte_cost": freinte_cost
+        "freinte_cost": freinte_cost,
+        "ingredients": ingredients_detail,
     }
 
 async def calculate_cost(recipe_id: str) -> CostBreakdown:
@@ -850,7 +864,10 @@ async def calculate_cost(recipe_id: str) -> CostBreakdown:
                 "quantity": ing['quantity'],
                 "unit": ing['unit'],
                 "unit_cost": sub_cost_data['cost'],
-                "total_cost": round(cost, 2)
+                "total_cost": round(cost, 2),
+                "material_cost": round(sub_cost_data.get('material_cost', 0), 2),
+                "labor_cost": round(sub_cost_data.get('labor_cost', 0), 2),
+                "ingredients": sub_cost_data.get('ingredients', []),
             })
         else:
             base_cost = ing['quantity'] * ing['unit_price']
@@ -934,6 +951,210 @@ async def calculate_cost(recipe_id: str) -> CostBreakdown:
 @api_router.get("/recipes/{recipe_id}/cost")
 async def get_recipe_cost(recipe_id: str):
     return await calculate_cost(recipe_id)
+
+# ========= SIMULATION VERSIONS =========
+@api_router.get("/recipes/{recipe_id}/simulations")
+async def get_simulations(recipe_id: str):
+    """Get all simulation versions for a recipe"""
+    sims = await db.recipe_simulations.find(
+        {"recipe_id": recipe_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return sims
+
+@api_router.post("/recipes/{recipe_id}/simulations")
+async def save_simulation(recipe_id: str, request: Request, user: dict = Depends(require_role("admin", "manager"))):
+    """Save a simulation version"""
+    body = await request.json()
+    recipe = await db.recipes.find_one({"id": recipe_id}, {"_id": 0})
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recette introuvable")
+
+    # Count existing versions
+    count = await db.recipe_simulations.count_documents({"recipe_id": recipe_id})
+    version_num = count + 1
+
+    sim = {
+        "id": str(uuid.uuid4()),
+        "recipe_id": recipe_id,
+        "version": version_num,
+        "label": body.get("label", f"Simulation v{version_num}"),
+        "sim_ingredients": body.get("sim_ingredients", {}),
+        "sim_labor": body.get("sim_labor", {}),
+        "cost_summary": body.get("cost_summary", {}),
+        "created_by": user.get("email", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.recipe_simulations.insert_one(sim)
+    # Remove _id
+    return {"message": "Simulation sauvegardee", "simulation": {k: v for k, v in sim.items() if k != "_id"}}
+
+@api_router.delete("/recipes/{recipe_id}/simulations/{sim_id}")
+async def delete_simulation(recipe_id: str, sim_id: str, user: dict = Depends(require_admin)):
+    await db.recipe_simulations.delete_one({"id": sim_id, "recipe_id": recipe_id})
+    return {"message": "Simulation supprimee"}
+
+
+# ========= RECIPE IMAGE UPLOAD =========
+UPLOAD_DIR = ROOT_DIR / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+@api_router.post("/recipes/{recipe_id}/image")
+async def upload_recipe_image(recipe_id: str, file: UploadFile = File(...)):
+    """Upload an image for a recipe"""
+    recipe = await db.recipes.find_one({"id": recipe_id}, {"_id": 0})
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recette introuvable")
+
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "jpg"
+    if ext not in ("jpg", "jpeg", "png", "webp"):
+        raise HTTPException(status_code=400, detail="Format image non supporte (jpg, png, webp)")
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image trop volumineuse (max 5 Mo)")
+
+    filename = f"{recipe_id}.{ext}"
+    filepath = UPLOAD_DIR / filename
+    filepath.write_bytes(content)
+
+    image_url = f"/api/uploads/{filename}"
+    await db.recipes.update_one({"id": recipe_id}, {"$set": {"image_url": image_url}})
+    return {"image_url": image_url}
+
+@api_router.post("/recipes/{recipe_id}/image-url")
+async def set_recipe_image_url(recipe_id: str, request: Request):
+    """Set an image URL for a recipe"""
+    body = await request.json()
+    url = body.get("url", "")
+    if not url:
+        raise HTTPException(status_code=400, detail="URL requise")
+    await db.recipes.update_one({"id": recipe_id}, {"$set": {"image_url": url}})
+    return {"image_url": url}
+
+@api_router.get("/uploads/{filename}")
+async def serve_upload(filename: str):
+    """Serve uploaded files"""
+    filepath = UPLOAD_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404)
+    ext = filename.split(".")[-1].lower()
+    media_types = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
+    return StreamingResponse(open(filepath, "rb"), media_type=media_types.get(ext, "application/octet-stream"))
+
+# ========= INDIVIDUAL RECIPE EXCEL EXPORT =========
+@api_router.get("/recipes/{recipe_id}/excel")
+async def export_recipe_excel(recipe_id: str):
+    """Export a single recipe as Excel"""
+    cost = await calculate_cost(recipe_id)
+    recipe = await db.recipes.find_one({"id": recipe_id}, {"_id": 0})
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Fiche recette"
+
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="002FA7", end_color="002FA7", fill_type="solid")
+    green_fill = PatternFill(start_color="10B981", end_color="10B981", fill_type="solid")
+    amber_fill = PatternFill(start_color="F59E0B", end_color="F59E0B", fill_type="solid")
+    bold_font = Font(bold=True, size=11)
+    border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+
+    # Header info
+    ws.merge_cells("A1:E1")
+    ws["A1"] = f"FICHE DE PRIX DE REVIENT - {cost.recipe_name}"
+    ws["A1"].font = Font(bold=True, size=16, color="002FA7")
+    ws["A2"] = f"Date: {datetime.now().strftime('%d/%m/%Y')}"
+    ws["A3"] = f"Production: {cost.output_quantity} {cost.output_unit}"
+    ws["A4"] = f"Client: {recipe.get('supplier_name', '-')}"
+    ws["A5"] = f"Type: {recipe.get('product_type', '-')}"
+
+    row = 7
+    # Materials
+    ws.cell(row=row, column=1, value="MATIERES PREMIERES").font = bold_font
+    row += 1
+    for col, h in enumerate(["Matiere", "Quantite", "Unite", "Prix/u", "Freinte %", "Total"], 1):
+        c = ws.cell(row=row, column=col, value=h)
+        c.font = header_font
+        c.fill = header_fill
+        c.border = border
+    row += 1
+    for m in cost.material_details:
+        ws.cell(row=row, column=1, value=m["name"]).border = border
+        ws.cell(row=row, column=2, value=m["quantity"]).border = border
+        ws.cell(row=row, column=3, value=m["unit"]).border = border
+        ws.cell(row=row, column=4, value=m["unit_price"]).border = border
+        ws.cell(row=row, column=5, value=m.get("freinte", 0)).border = border
+        ws.cell(row=row, column=6, value=m["total_cost"]).border = border
+        row += 1
+    ws.cell(row=row, column=5, value="Sous-total:").font = bold_font
+    ws.cell(row=row, column=6, value=cost.total_material_cost).font = bold_font
+    row += 2
+
+    # Sub-recipes
+    if cost.sub_recipe_details:
+        ws.cell(row=row, column=1, value="ARTICLES SEMI-FINIS").font = bold_font
+        row += 1
+        for col, h in enumerate(["Semi-fini", "Quantite", "Unite", "Cout/u", "Total"], 1):
+            c = ws.cell(row=row, column=col, value=h)
+            c.font = header_font
+            c.fill = amber_fill
+            c.border = border
+        row += 1
+        for s in cost.sub_recipe_details:
+            ws.cell(row=row, column=1, value=s["name"]).border = border
+            ws.cell(row=row, column=2, value=s["quantity"]).border = border
+            ws.cell(row=row, column=3, value=s["unit"]).border = border
+            ws.cell(row=row, column=4, value=round(s["unit_cost"], 2)).border = border
+            ws.cell(row=row, column=5, value=s["total_cost"]).border = border
+            row += 1
+        row += 1
+
+    # Labor
+    ws.cell(row=row, column=1, value="MAIN D'OEUVRE").font = bold_font
+    row += 1
+    for col, h in enumerate(["Description", "Heures", "Taux horaire", "Total"], 1):
+        c = ws.cell(row=row, column=col, value=h)
+        c.font = header_font
+        c.fill = green_fill
+        c.border = border
+    row += 1
+    for l in cost.labor_details:
+        ws.cell(row=row, column=1, value=l["description"]).border = border
+        ws.cell(row=row, column=2, value=l["hours"]).border = border
+        ws.cell(row=row, column=3, value=l["hourly_rate"]).border = border
+        ws.cell(row=row, column=4, value=l["total_cost"]).border = border
+        row += 1
+    row += 1
+
+    # Summary
+    ws.cell(row=row, column=1, value="RECAPITULATIF").font = Font(bold=True, size=13, color="002FA7")
+    row += 1
+    for label, val in [
+        ("Cout matieres", cost.total_material_cost),
+        ("Cout main d'oeuvre", cost.total_labor_cost),
+        ("Frais generaux", cost.total_overhead_cost),
+        ("COUT TOTAL", cost.total_cost),
+        (f"Prix de revient / {cost.output_unit}", cost.cost_per_unit),
+        (f"Marge cible", f"{cost.target_margin}%"),
+        ("PRIX DE VENTE CONSEILLE", cost.suggested_price),
+    ]:
+        ws.cell(row=row, column=1, value=label).font = bold_font
+        ws.cell(row=row, column=2, value=val).font = bold_font
+        row += 1
+
+    # Column widths
+    for col_letter, width in [("A", 25), ("B", 12), ("C", 10), ("D", 12), ("E", 12), ("F", 12)]:
+        ws.column_dimensions[col_letter].width = width
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    filename = f"fiche_{cost.recipe_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+
 
 # Save price history
 @api_router.post("/recipes/{recipe_id}/save-history")
@@ -1053,6 +1274,7 @@ async def get_all_costs():
                 "recipe_name": recipe['name'],
                 "category_id": recipe.get('category_id'),
                 "supplier_name": recipe.get('supplier_name', ''),
+                "product_type": recipe.get('product_type', ''),
                 "version": recipe.get('version', 1),
                 "output_quantity": recipe.get('output_quantity', 1),
                 "output_unit": recipe.get('output_unit', 'pièce'),
@@ -1479,99 +1701,157 @@ async def get_import_logs(limit: int = 50):
 async def export_recipe_pdf(recipe_id: str):
     cost = await calculate_cost(recipe_id)
     recipe = await db.recipes.find_one({"id": recipe_id}, {"_id": 0})
-    
+
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
-    
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=1.5*cm, bottomMargin=1.5*cm)
+
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24, textColor=colors.HexColor('#002FA7'), alignment=TA_CENTER, spaceAfter=20)
-    heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=14, textColor=colors.HexColor('#09090B'), spaceBefore=20, spaceAfter=10)
-    
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=22, textColor=colors.HexColor('#002FA7'), alignment=TA_CENTER, spaceAfter=10)
+    heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#09090B'), spaceBefore=16, spaceAfter=8)
+    small_style = ParagraphStyle('SmallText', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#71717A'))
+
+    table_base_style = [
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E4E4E7')),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]
+
     elements = []
     elements.append(Paragraph("FICHE DE PRIX DE REVIENT", title_style))
-    elements.append(Spacer(1, 10))
-    elements.append(Paragraph(f"<b>Produit:</b> {cost.recipe_name}", styles['Normal']))
-    elements.append(Paragraph(f"<b>Quantité produite:</b> {cost.output_quantity} {cost.output_unit}", styles['Normal']))
-    elements.append(Paragraph(f"<b>Date:</b> {datetime.now().strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
-    elements.append(Spacer(1, 20))
-    
+
+    # Info block
+    client_name = recipe.get('supplier_name', '-') or '-'
+    product_type = recipe.get('product_type', '-') or '-'
+    info_data = [
+        ["Produit", cost.recipe_name, "Client", client_name],
+        ["Production", f"{cost.output_quantity} {cost.output_unit}", "Type", product_type],
+        ["Version", f"v{recipe.get('version', 1)}", "Date", datetime.now().strftime('%d/%m/%Y %H:%M')],
+    ]
+    if recipe.get('description'):
+        info_data.append(["Description", recipe['description'], "", ""])
+    info_table = Table(info_data, colWidths=[3*cm, 5.5*cm, 3*cm, 5.5*cm])
+    info_table.setStyle(TableStyle([
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#71717A')),
+        ('TEXTCOLOR', (2, 0), (2, -1), colors.HexColor('#71717A')),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#E4E4E7')),
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#FAFAFA')),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 12))
+
     # Materials Table
     if cost.material_details:
-        elements.append(Paragraph("1. MATIÈRES PREMIÈRES", heading_style))
-        mat_data = [["Matière", "Quantité", "Prix/u", "Freinte", "Total"]]
+        elements.append(Paragraph("1. MATIERES PREMIERES", heading_style))
+        mat_data = [["Matiere", "Qte", "Unite", "Prix/u", "Freinte", "Total"]]
         for mat in cost.material_details:
-            mat_data.append([mat['name'], f"{mat['quantity']} {mat['unit']}", f"{mat['unit_price']:.2f} €", f"{mat.get('freinte', 0)}%", f"{mat['total_cost']:.2f} €"])
-        mat_data.append(["", "", "", "Sous-total:", f"{cost.total_material_cost:.2f} €"])
-        mat_table = Table(mat_data, colWidths=[5*cm, 3*cm, 2.5*cm, 2*cm, 3*cm])
-        mat_table.setStyle(TableStyle([
+            mat_data.append([mat['name'], f"{mat['quantity']}", mat['unit'], f"{mat['unit_price']:.2f} EUR",
+                           f"{mat.get('freinte', 0)}%", f"{mat['total_cost']:.2f} EUR"])
+        mat_data.append(["", "", "", "", "Sous-total:", f"{cost.total_material_cost:.2f} EUR"])
+        mat_table = Table(mat_data, colWidths=[4.5*cm, 2*cm, 1.5*cm, 2.5*cm, 2*cm, 3*cm])
+        mat_table.setStyle(TableStyle(table_base_style + [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#002FA7')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E4E4E7')),
             ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#F4F4F5')),
             ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
         ]))
         elements.append(mat_table)
-    
+
+    # Sub-recipes
+    if cost.sub_recipe_details:
+        elements.append(Paragraph("2. ARTICLES SEMI-FINIS", heading_style))
+        for sub in cost.sub_recipe_details:
+            sub_header = [["Semi-fini", "Qte", "Unite", "Cout/u", "Total"]]
+            sub_header.append([sub['name'], f"{sub['quantity']}", sub['unit'],
+                             f"{sub['unit_cost']:.2f} EUR", f"{sub['total_cost']:.2f} EUR"])
+            sub_table = Table(sub_header, colWidths=[5*cm, 2*cm, 2*cm, 3*cm, 3*cm])
+            sub_table.setStyle(TableStyle(table_base_style + [
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F59E0B')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ]))
+            elements.append(sub_table)
+            # Detail of sub-recipe ingredients
+            if sub.get('ingredients'):
+                detail_data = [["  Composition", "Qte", "Unite", "Prix/u", "Total"]]
+                for si in sub['ingredients']:
+                    detail_data.append([
+                        f"  {si['name']}", f"{si['quantity']}", si.get('unit', ''),
+                        f"{si.get('unit_price', 0):.2f} EUR" if not si.get('is_sub_recipe') else "-",
+                        f"{si['total_cost']:.2f} EUR"
+                    ])
+                detail_table = Table(detail_data, colWidths=[5*cm, 2*cm, 2*cm, 3*cm, 3*cm])
+                detail_table.setStyle(TableStyle([
+                    ('FONTSIZE', (0, 0), (-1, -1), 7),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#71717A')),
+                    ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#E4E4E7')),
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#FFFBEB')),
+                ]))
+                elements.append(detail_table)
+            elements.append(Spacer(1, 4))
+
     # Labor Table
+    section_num = 3 if cost.sub_recipe_details else 2
     if cost.labor_details:
-        elements.append(Paragraph("2. MAIN D'ŒUVRE", heading_style))
+        elements.append(Paragraph(f"{section_num}. MAIN D'OEUVRE", heading_style))
         labor_data = [["Description", "Heures", "Taux horaire", "Total"]]
         for labor in cost.labor_details:
-            labor_data.append([labor['description'], f"{labor['hours']} h", f"{labor['hourly_rate']:.2f} €/h", f"{labor['total_cost']:.2f} €"])
-        labor_data.append(["", "", "Sous-total:", f"{cost.total_labor_cost:.2f} €"])
-        labor_table = Table(labor_data, colWidths=[7*cm, 3*cm, 3*cm, 3*cm])
-        labor_table.setStyle(TableStyle([
+            labor_data.append([labor['description'], f"{labor['hours']} h", f"{labor['hourly_rate']:.2f} EUR/h", f"{labor['total_cost']:.2f} EUR"])
+        labor_data.append(["", "", "Sous-total:", f"{cost.total_labor_cost:.2f} EUR"])
+        labor_table = Table(labor_data, colWidths=[6*cm, 3*cm, 3.5*cm, 3*cm])
+        labor_table.setStyle(TableStyle(table_base_style + [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#10B981')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E4E4E7')),
             ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#F4F4F5')),
             ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
         ]))
         elements.append(labor_table)
-    
+        section_num += 1
+
     # Overheads
     if cost.overhead_details:
-        elements.append(Paragraph("3. FRAIS GÉNÉRAUX", heading_style))
-        oh_data = [["Frais", "Catégorie", "Méthode", "Total"]]
+        elements.append(Paragraph(f"{section_num}. FRAIS GENERAUX", heading_style))
+        oh_data = [["Frais", "Categorie", "Methode", "Total"]]
         for oh in cost.overhead_details:
-            oh_data.append([oh['name'], oh['category'], oh['allocation_method'], f"{oh['total_cost']:.2f} €"])
-        oh_data.append(["", "", "Sous-total:", f"{cost.total_overhead_cost:.2f} €"])
-        oh_table = Table(oh_data, colWidths=[5*cm, 4*cm, 4*cm, 3*cm])
-        oh_table.setStyle(TableStyle([
+            oh_data.append([oh['name'], oh['category'], oh['allocation_method'], f"{oh['total_cost']:.2f} EUR"])
+        oh_data.append(["", "", "Sous-total:", f"{cost.total_overhead_cost:.2f} EUR"])
+        oh_table = Table(oh_data, colWidths=[5*cm, 3.5*cm, 4*cm, 3*cm])
+        oh_table.setStyle(TableStyle(table_base_style + [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F59E0B')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E4E4E7')),
             ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#F4F4F5')),
             ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
         ]))
         elements.append(oh_table)
-    
+
     # Summary with margin
-    elements.append(Spacer(1, 30))
-    elements.append(Paragraph("RÉCAPITULATIF ET MARGE", heading_style))
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph("RECAPITULATIF ET MARGE", heading_style))
     summary_data = [
-        ["Coût matières (dont freinte)", f"{cost.total_material_cost:.2f} €"],
-        ["Coût de main d'œuvre", f"{cost.total_labor_cost:.2f} €"],
-        ["Frais généraux", f"{cost.total_overhead_cost:.2f} €"],
-        ["COÛT TOTAL", f"{cost.total_cost:.2f} €"],
-        [f"PRIX DE REVIENT / {cost.output_unit}", f"{cost.cost_per_unit:.2f} €"],
+        ["Cout matieres (dont freinte)", f"{cost.total_material_cost:.2f} EUR"],
+        ["Cout de main d'oeuvre", f"{cost.total_labor_cost:.2f} EUR"],
+        ["Frais generaux", f"{cost.total_overhead_cost:.2f} EUR"],
+        ["COUT TOTAL", f"{cost.total_cost:.2f} EUR"],
+        [f"PRIX DE REVIENT / {cost.output_unit}", f"{cost.cost_per_unit:.2f} EUR"],
         [f"Marge cible ({cost.target_margin}%)", ""],
-        ["PRIX DE VENTE CONSEILLÉ", f"{cost.suggested_price:.2f} €"],
+        ["PRIX DE VENTE CONSEILLE", f"{cost.suggested_price:.2f} EUR"],
     ]
     summary_table = Table(summary_data, colWidths=[10*cm, 5*cm])
     summary_table.setStyle(TableStyle([
-        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
         ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E4E4E7')),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
         ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#002FA7')),
         ('TEXTCOLOR', (0, 3), (-1, 3), colors.white),
         ('FONTNAME', (0, 3), (-1, 3), 'Helvetica-Bold'),
@@ -1581,13 +1861,15 @@ async def export_recipe_pdf(recipe_id: str):
         ('BACKGROUND', (0, 6), (-1, 6), colors.HexColor('#10B981')),
         ('TEXTCOLOR', (0, 6), (-1, 6), colors.white),
         ('FONTNAME', (0, 6), (-1, 6), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 6), (-1, 6), 14),
+        ('FONTSIZE', (0, 6), (-1, 6), 13),
     ]))
     elements.append(summary_table)
-    
+    elements.append(Spacer(1, 10))
+    elements.append(Paragraph(f"Document genere le {datetime.now().strftime('%d/%m/%Y a %H:%M')} - PrixRevient", small_style))
+
     doc.build(elements)
     buffer.seek(0)
-    
+
     filename = f"prix_revient_{cost.recipe_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf"
     return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={filename}"})
 
@@ -1610,7 +1892,7 @@ async def export_all_costs_xlsx():
         top=Side(style="thin"), bottom=Side(style="thin")
     )
     
-    headers = ["Recette", "Version", "Fournisseur", "Type", "Qte produite", "Unite", "Cout Matieres", "Cout Main oeuvre",
+    headers = ["Recette", "Version", "Client", "Type", "Qte produite", "Unite", "Cout Matieres", "Cout Main oeuvre",
                "Cout Frais Gen.", "Cout Freinte", "Cout Total", "Prix/Unite", "Marge %", "Prix Conseille"]
     
     for col, h in enumerate(headers, 1):
@@ -2162,12 +2444,12 @@ SEED_CATEGORIES = [
 ]
 
 SEED_SUPPLIERS = [
-    {"name": "Moulin du Nord", "code": "FRN-001", "contact": "Jean Dupont", "email": "contact@moulin-nord.fr", "phone": "0321456789", "address": "12 rue des Meuniers, 59000 Lille"},
-    {"name": "Laiterie Dupont", "code": "FRN-002", "contact": "Marie Martin", "email": "pro@laiterie-dupont.fr", "phone": "0322334455", "address": "45 avenue du Lait, 62000 Arras"},
-    {"name": "Fruits & Co", "code": "FRN-003", "contact": "Pierre Leroy", "email": "commandes@fruitsco.fr", "phone": "0145678901", "address": "8 marche de Rungis, 94150 Rungis"},
-    {"name": "Sucre France", "code": "FRN-004", "contact": "Sophie Moreau", "email": "ventes@sucrefrance.fr", "phone": "0380123456", "address": "Route de Dijon, 21000 Dijon"},
-    {"name": "Choco Premium", "code": "FRN-005", "contact": "Laurent Blanc", "email": "pro@chocopremium.be", "phone": "+32478901234", "address": "Rue du Chocolat 22, 1000 Bruxelles"},
-    {"name": "Epices du Monde", "code": "FRN-006", "contact": "Fatima Amrani", "email": "info@epicesdumonde.fr", "phone": "0491234567", "address": "15 quai des Epices, 13002 Marseille"},
+    {"name": "Carrefour", "code": "CLI-001", "contact": "Jean Dupont", "email": "achat@carrefour.fr", "phone": "0321456789", "address": "12 rue du Commerce, 59000 Lille"},
+    {"name": "Leclerc", "code": "CLI-002", "contact": "Marie Martin", "email": "pro@leclerc.fr", "phone": "0322334455", "address": "45 avenue Leclerc, 62000 Arras"},
+    {"name": "Auchan", "code": "CLI-003", "contact": "Pierre Leroy", "email": "commandes@auchan.fr", "phone": "0145678901", "address": "8 centre commercial, 94150 Rungis"},
+    {"name": "Intermarche", "code": "CLI-004", "contact": "Sophie Moreau", "email": "ventes@intermarche.fr", "phone": "0380123456", "address": "Route de Dijon, 21000 Dijon"},
+    {"name": "Lidl", "code": "CLI-005", "contact": "Laurent Blanc", "email": "pro@lidl.fr", "phone": "0478901234", "address": "22 rue du Discount, 69000 Lyon"},
+    {"name": "Metro", "code": "CLI-006", "contact": "Fatima Amrani", "email": "info@metro.fr", "phone": "0491234567", "address": "15 quai des Pros, 13002 Marseille"},
 ]
 
 SEED_UNITS = [
@@ -2188,24 +2470,24 @@ SEED_OVERHEADS = [
 ]
 
 SEED_MATERIALS_SPEC = [
-    {"name": "Farine de ble T55", "code_article": "MAT-001", "unit": "kg", "unit_price": 1.20, "category": "Farines & cereales", "supplier": "Moulin du Nord", "freinte": 2.0, "stock_quantity": 150, "stock_alert_threshold": 20},
-    {"name": "Farine de ble T65", "code_article": "MAT-002", "unit": "kg", "unit_price": 1.35, "category": "Farines & cereales", "supplier": "Moulin du Nord", "freinte": 2.0, "stock_quantity": 80, "stock_alert_threshold": 15},
-    {"name": "Beurre doux 82%", "code_article": "MAT-003", "unit": "kg", "unit_price": 8.50, "category": "Produits laitiers", "supplier": "Laiterie Dupont", "freinte": 1.0, "stock_quantity": 25, "stock_alert_threshold": 5},
-    {"name": "Sucre semoule", "code_article": "MAT-004", "unit": "kg", "unit_price": 1.10, "category": "Sucres & edulcorants", "supplier": "Sucre France", "freinte": 0.5, "stock_quantity": 100, "stock_alert_threshold": 15},
-    {"name": "Oeufs frais (calibre M)", "code_article": "MAT-005", "unit": "pce", "unit_price": 0.28, "category": "Oeufs & ovoproduits", "supplier": "Laiterie Dupont", "freinte": 3.0, "stock_quantity": 360, "stock_alert_threshold": 60},
-    {"name": "Lait entier", "code_article": "MAT-006", "unit": "L", "unit_price": 1.05, "category": "Produits laitiers", "supplier": "Laiterie Dupont", "freinte": 1.0, "stock_quantity": 40, "stock_alert_threshold": 10},
-    {"name": "Creme fraiche 35%", "code_article": "MAT-007", "unit": "L", "unit_price": 4.80, "category": "Produits laitiers", "supplier": "Laiterie Dupont", "freinte": 2.0, "stock_quantity": 15, "stock_alert_threshold": 5},
-    {"name": "Pommes Golden", "code_article": "MAT-008", "unit": "kg", "unit_price": 2.90, "category": "Fruits & legumes", "supplier": "Fruits & Co", "freinte": 8.0, "stock_quantity": 30, "stock_alert_threshold": 10},
-    {"name": "Chocolat noir 70%", "code_article": "MAT-009", "unit": "kg", "unit_price": 12.50, "category": "Chocolat & cacao", "supplier": "Choco Premium", "freinte": 1.5, "stock_quantity": 10, "stock_alert_threshold": 3},
-    {"name": "Levure boulangere", "code_article": "MAT-010", "unit": "kg", "unit_price": 5.20, "category": "Farines & cereales", "supplier": "Moulin du Nord", "freinte": 0.0, "stock_quantity": 5, "stock_alert_threshold": 1},
-    {"name": "Extrait de vanille", "code_article": "MAT-011", "unit": "L", "unit_price": 85.00, "category": "Epices & aromes", "supplier": "Epices du Monde", "freinte": 0.0, "stock_quantity": 2, "stock_alert_threshold": 0.5},
-    {"name": "Sel fin", "code_article": "MAT-012", "unit": "kg", "unit_price": 0.65, "category": "Epices & aromes", "supplier": "Moulin du Nord", "freinte": 0.0, "stock_quantity": 25, "stock_alert_threshold": 5},
-    {"name": "Poudre d'amandes", "code_article": "MAT-013", "unit": "kg", "unit_price": 14.80, "category": "Fruits & legumes", "supplier": "Fruits & Co", "freinte": 1.0, "stock_quantity": 8, "stock_alert_threshold": 2},
-    {"name": "Sucre glace", "code_article": "MAT-014", "unit": "kg", "unit_price": 2.10, "category": "Sucres & edulcorants", "supplier": "Sucre France", "freinte": 1.0, "stock_quantity": 20, "stock_alert_threshold": 5},
-    {"name": "Cacao en poudre", "code_article": "MAT-015", "unit": "kg", "unit_price": 9.80, "category": "Chocolat & cacao", "supplier": "Choco Premium", "freinte": 0.5, "stock_quantity": 6, "stock_alert_threshold": 2},
-    {"name": "Huile de tournesol", "code_article": "MAT-016", "unit": "L", "unit_price": 2.40, "category": "Matieres grasses", "supplier": "Sucre France", "freinte": 0.5, "stock_quantity": 20, "stock_alert_threshold": 5},
-    {"name": "Miel toutes fleurs", "code_article": "MAT-017", "unit": "kg", "unit_price": 11.50, "category": "Sucres & edulcorants", "supplier": "Epices du Monde", "freinte": 0.0, "stock_quantity": 5, "stock_alert_threshold": 1},
-    {"name": "Poires Williams", "code_article": "MAT-018", "unit": "kg", "unit_price": 3.50, "category": "Fruits & legumes", "supplier": "Fruits & Co", "freinte": 10.0, "stock_quantity": 15, "stock_alert_threshold": 5},
+    {"name": "Farine de ble T55", "code_article": "MAT-001", "unit": "kg", "unit_price": 1.20, "category": "Farines & cereales", "supplier": "Carrefour", "freinte": 2.0, "stock_quantity": 150, "stock_alert_threshold": 20},
+    {"name": "Farine de ble T65", "code_article": "MAT-002", "unit": "kg", "unit_price": 1.35, "category": "Farines & cereales", "supplier": "Carrefour", "freinte": 2.0, "stock_quantity": 80, "stock_alert_threshold": 15},
+    {"name": "Beurre doux 82%", "code_article": "MAT-003", "unit": "kg", "unit_price": 8.50, "category": "Produits laitiers", "supplier": "Leclerc", "freinte": 1.0, "stock_quantity": 25, "stock_alert_threshold": 5},
+    {"name": "Sucre semoule", "code_article": "MAT-004", "unit": "kg", "unit_price": 1.10, "category": "Sucres & edulcorants", "supplier": "Intermarche", "freinte": 0.5, "stock_quantity": 100, "stock_alert_threshold": 15},
+    {"name": "Oeufs frais (calibre M)", "code_article": "MAT-005", "unit": "pce", "unit_price": 0.28, "category": "Oeufs & ovoproduits", "supplier": "Leclerc", "freinte": 3.0, "stock_quantity": 360, "stock_alert_threshold": 60},
+    {"name": "Lait entier", "code_article": "MAT-006", "unit": "L", "unit_price": 1.05, "category": "Produits laitiers", "supplier": "Leclerc", "freinte": 1.0, "stock_quantity": 40, "stock_alert_threshold": 10},
+    {"name": "Creme fraiche 35%", "code_article": "MAT-007", "unit": "L", "unit_price": 4.80, "category": "Produits laitiers", "supplier": "Leclerc", "freinte": 2.0, "stock_quantity": 15, "stock_alert_threshold": 5},
+    {"name": "Pommes Golden", "code_article": "MAT-008", "unit": "kg", "unit_price": 2.90, "category": "Fruits & legumes", "supplier": "Auchan", "freinte": 8.0, "stock_quantity": 30, "stock_alert_threshold": 10},
+    {"name": "Chocolat noir 70%", "code_article": "MAT-009", "unit": "kg", "unit_price": 12.50, "category": "Chocolat & cacao", "supplier": "Lidl", "freinte": 1.5, "stock_quantity": 10, "stock_alert_threshold": 3},
+    {"name": "Levure boulangere", "code_article": "MAT-010", "unit": "kg", "unit_price": 5.20, "category": "Farines & cereales", "supplier": "Carrefour", "freinte": 0.0, "stock_quantity": 5, "stock_alert_threshold": 1},
+    {"name": "Extrait de vanille", "code_article": "MAT-011", "unit": "L", "unit_price": 85.00, "category": "Epices & aromes", "supplier": "Metro", "freinte": 0.0, "stock_quantity": 2, "stock_alert_threshold": 0.5},
+    {"name": "Sel fin", "code_article": "MAT-012", "unit": "kg", "unit_price": 0.65, "category": "Epices & aromes", "supplier": "Carrefour", "freinte": 0.0, "stock_quantity": 25, "stock_alert_threshold": 5},
+    {"name": "Poudre d'amandes", "code_article": "MAT-013", "unit": "kg", "unit_price": 14.80, "category": "Fruits & legumes", "supplier": "Auchan", "freinte": 1.0, "stock_quantity": 8, "stock_alert_threshold": 2},
+    {"name": "Sucre glace", "code_article": "MAT-014", "unit": "kg", "unit_price": 2.10, "category": "Sucres & edulcorants", "supplier": "Intermarche", "freinte": 1.0, "stock_quantity": 20, "stock_alert_threshold": 5},
+    {"name": "Cacao en poudre", "code_article": "MAT-015", "unit": "kg", "unit_price": 9.80, "category": "Chocolat & cacao", "supplier": "Lidl", "freinte": 0.5, "stock_quantity": 6, "stock_alert_threshold": 2},
+    {"name": "Huile de tournesol", "code_article": "MAT-016", "unit": "L", "unit_price": 2.40, "category": "Matieres grasses", "supplier": "Intermarche", "freinte": 0.5, "stock_quantity": 20, "stock_alert_threshold": 5},
+    {"name": "Miel toutes fleurs", "code_article": "MAT-017", "unit": "kg", "unit_price": 11.50, "category": "Sucres & edulcorants", "supplier": "Metro", "freinte": 0.0, "stock_quantity": 5, "stock_alert_threshold": 1},
+    {"name": "Poires Williams", "code_article": "MAT-018", "unit": "kg", "unit_price": 3.50, "category": "Fruits & legumes", "supplier": "Auchan", "freinte": 10.0, "stock_quantity": 15, "stock_alert_threshold": 5},
 ]
 
 @api_router.post("/data/seed")
@@ -2340,9 +2622,9 @@ async def seed_data(admin: dict = Depends(require_admin)):
     if not await db.recipes.find_one({"name": "Tarte aux pommes"}):
         await db.recipes.insert_one({
             "id": str(uuid.uuid4()), "name": "Tarte aux pommes", "description": "Tarte aux pommes tradition avec pate brisee maison",
-            "category_id": cat_map.get("Fruits & legumes", ""), "supplier_id": sup_map.get("Fruits & Co", ""), "supplier_name": "Fruits & Co",
+            "category_id": cat_map.get("Fruits & legumes", ""), "supplier_id": sup_map.get("Auchan", ""), "supplier_name": "Auchan",
             "version": 1, "output_quantity": 8.0, "output_unit": "part", "target_margin": 35.0,
-            "is_intermediate": False,
+            "is_intermediate": False, "product_type": "MDD",
             "ingredients": [
                 {"material_id": None, "material_name": "Pate brisee", "sub_recipe_id": pb_id, "quantity": 0.4, "unit": "kg", "unit_price": 0, "freinte": 0, "is_sub_recipe": True},
                 {"material_id": mat_map.get("Pommes Golden", {}).get("id", ""), "material_name": "Pommes Golden", "sub_recipe_id": None, "quantity": 0.8, "unit": "kg", "unit_price": 2.90, "freinte": 8.0, "is_sub_recipe": False},
@@ -2362,9 +2644,9 @@ async def seed_data(admin: dict = Depends(require_admin)):
     if not await db.recipes.find_one({"name": "Eclair au chocolat"}):
         await db.recipes.insert_one({
             "id": str(uuid.uuid4()), "name": "Eclair au chocolat", "description": "Eclair garni de creme patissiere, glace chocolat",
-            "category_id": cat_map.get("Chocolat & cacao", ""), "supplier_id": sup_map.get("Choco Premium", ""), "supplier_name": "Choco Premium",
+            "category_id": cat_map.get("Chocolat & cacao", ""), "supplier_id": sup_map.get("Lidl", ""), "supplier_name": "Lidl",
             "version": 1, "output_quantity": 12.0, "output_unit": "piece", "target_margin": 40.0,
-            "is_intermediate": False,
+            "is_intermediate": False, "product_type": "MN",
             "ingredients": [
                 {"material_id": mat_map.get("Farine de ble T55", {}).get("id", ""), "material_name": "Farine de ble T55", "sub_recipe_id": None, "quantity": 0.15, "unit": "kg", "unit_price": 1.20, "freinte": 2.0, "is_sub_recipe": False},
                 {"material_id": mat_map.get("Beurre doux 82%", {}).get("id", ""), "material_name": "Beurre doux 82%", "sub_recipe_id": None, "quantity": 0.1, "unit": "kg", "unit_price": 8.50, "freinte": 1.0, "is_sub_recipe": False},
@@ -2386,9 +2668,9 @@ async def seed_data(admin: dict = Depends(require_admin)):
     if not await db.recipes.find_one({"name": "Pain de campagne"}):
         await db.recipes.insert_one({
             "id": str(uuid.uuid4()), "name": "Pain de campagne", "description": "Pain rustique au levain avec melange de farines",
-            "category_id": cat_map.get("Farines & cereales", ""), "supplier_id": sup_map.get("Moulin du Nord", ""), "supplier_name": "Moulin du Nord",
+            "category_id": cat_map.get("Farines & cereales", ""), "supplier_id": sup_map.get("Carrefour", ""), "supplier_name": "Carrefour",
             "version": 1, "output_quantity": 4.0, "output_unit": "piece", "target_margin": 25.0,
-            "is_intermediate": False,
+            "is_intermediate": False, "product_type": "SM",
             "ingredients": [
                 {"material_id": mat_map.get("Farine de ble T65", {}).get("id", ""), "material_name": "Farine de ble T65", "sub_recipe_id": None, "quantity": 1.0, "unit": "kg", "unit_price": 1.35, "freinte": 2.0, "is_sub_recipe": False},
                 {"material_id": mat_map.get("Levure boulangere", {}).get("id", ""), "material_name": "Levure boulangere", "sub_recipe_id": None, "quantity": 0.02, "unit": "kg", "unit_price": 5.20, "freinte": 0.0, "is_sub_recipe": False},
@@ -2407,9 +2689,9 @@ async def seed_data(admin: dict = Depends(require_admin)):
     if not await db.recipes.find_one({"name": "Croissant au beurre"}):
         await db.recipes.insert_one({
             "id": str(uuid.uuid4()), "name": "Croissant au beurre", "description": "Croissant pur beurre feuillete",
-            "category_id": cat_map.get("Produits laitiers", ""), "supplier_id": sup_map.get("Laiterie Dupont", ""), "supplier_name": "Laiterie Dupont",
+            "category_id": cat_map.get("Produits laitiers", ""), "supplier_id": sup_map.get("Leclerc", ""), "supplier_name": "Leclerc",
             "version": 1, "output_quantity": 10.0, "output_unit": "piece", "target_margin": 45.0,
-            "is_intermediate": False,
+            "is_intermediate": False, "product_type": "MDD",
             "ingredients": [
                 {"material_id": mat_map.get("Farine de ble T55", {}).get("id", ""), "material_name": "Farine de ble T55", "sub_recipe_id": None, "quantity": 0.5, "unit": "kg", "unit_price": 1.20, "freinte": 2.0, "is_sub_recipe": False},
                 {"material_id": mat_map.get("Beurre doux 82%", {}).get("id", ""), "material_name": "Beurre doux 82%", "sub_recipe_id": None, "quantity": 0.25, "unit": "kg", "unit_price": 8.50, "freinte": 1.0, "is_sub_recipe": False},
@@ -2432,9 +2714,9 @@ async def seed_data(admin: dict = Depends(require_admin)):
     if not await db.recipes.find_one({"name": "Financier aux amandes"}):
         await db.recipes.insert_one({
             "id": str(uuid.uuid4()), "name": "Financier aux amandes", "description": "Petit gateau moelleux aux amandes et beurre noisette",
-            "category_id": cat_map.get("Fruits & legumes", ""), "supplier_id": sup_map.get("Fruits & Co", ""), "supplier_name": "Fruits & Co",
+            "category_id": cat_map.get("Fruits & legumes", ""), "supplier_id": sup_map.get("Intermarche", ""), "supplier_name": "Intermarche",
             "version": 1, "output_quantity": 20.0, "output_unit": "piece", "target_margin": 50.0,
-            "is_intermediate": False,
+            "is_intermediate": False, "product_type": "MP",
             "ingredients": [
                 {"material_id": mat_map.get("Poudre d'amandes", {}).get("id", ""), "material_name": "Poudre d'amandes", "sub_recipe_id": None, "quantity": 0.12, "unit": "kg", "unit_price": 14.80, "freinte": 1.0, "is_sub_recipe": False},
                 {"material_id": mat_map.get("Sucre glace", {}).get("id", ""), "material_name": "Sucre glace", "sub_recipe_id": None, "quantity": 0.15, "unit": "kg", "unit_price": 2.10, "freinte": 1.0, "is_sub_recipe": False},

@@ -5,7 +5,7 @@ import axios from "axios";
 import { 
   House, Package, CookingPot, Gear,
   CurrencyCircleDollar, SignOut, User, CaretLeft, CaretRight,
-  Truck, Tag, ChartLine, Table, TreeStructure, GearSix, Lightning
+  Truck, Tag, ChartLine, Table, TreeStructure, GearSix, Lightning, UserList
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -44,7 +44,7 @@ const Layout = () => {
     { to: "/bom", icon: TreeStructure, label: "Arbre fabrication", roles: ["admin", "manager", "operator"] },
     { to: "/simulation", icon: Lightning, label: "Simulation", roles: ["admin", "manager"] },
     { to: "/overheads", icon: Gear, label: "Frais generaux", roles: ["admin", "manager"] },
-    { to: "/suppliers", icon: Truck, label: "Fournisseurs", roles: ["admin", "manager"] },
+    { to: "/suppliers", icon: UserList, label: "Clients", roles: ["admin", "manager"] },
     { to: "/categories", icon: Tag, label: "Categories", roles: ["admin", "manager"] },
     { to: "/costs-table", icon: Table, label: "Tableau des couts", roles: ["admin", "manager", "operator"] },
     { to: "/comparison", icon: ChartLine, label: "Comparaison", roles: ["admin", "manager"] },

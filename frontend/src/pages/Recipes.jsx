@@ -22,6 +22,13 @@ import {
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+const PRODUCT_TYPES = [
+  { value: "MDD", label: "MDD - Marque Distributeur", color: "bg-blue-100 text-blue-700" },
+  { value: "MN", label: "MN - Marque Nationale", color: "bg-emerald-100 text-emerald-700" },
+  { value: "SM", label: "SM - Sans Marque", color: "bg-zinc-100 text-zinc-700" },
+  { value: "MP", label: "MP - Marque Propre", color: "bg-violet-100 text-violet-700" },
+];
+
 const Recipes = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -39,10 +46,11 @@ const Recipes = () => {
   const [recipeCosts, setRecipeCosts] = useState({});
   const [filterSupplier, setFilterSupplier] = useState("all");
   const [filterVersion, setFilterVersion] = useState("all");
+  const [filterProductType, setFilterProductType] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [formData, setFormData] = useState({
     name: "", description: "", output_quantity: "1", output_unit: "piece",
-    target_margin: "30", is_intermediate: false, category_id: "", supplier_id: "", supplier_name: "",
+    target_margin: "30", is_intermediate: false, category_id: "", supplier_id: "", supplier_name: "", product_type: "",
   });
 
   useEffect(() => {
@@ -94,6 +102,7 @@ const Recipes = () => {
         category_id: formData.category_id || null,
         supplier_id: formData.supplier_id || null,
         supplier_name: supplier ? supplier.name : "",
+        product_type: formData.product_type || null,
         ingredients: [],
         labor_costs: [],
         overhead_ids: [],
@@ -132,6 +141,7 @@ const Recipes = () => {
       category_id: recipe.category_id || "",
       supplier_id: recipe.supplier_id || "",
       supplier_name: recipe.supplier_name || "",
+      product_type: recipe.product_type || "",
     });
     setIsDialogOpen(true);
   };
@@ -161,7 +171,7 @@ const Recipes = () => {
 
   const resetForm = () => {
     setSelectedRecipe(null);
-    setFormData({ name: "", description: "", output_quantity: "1", output_unit: "piece", target_margin: "30", is_intermediate: false, category_id: "", supplier_id: "", supplier_name: "" });
+    setFormData({ name: "", description: "", output_quantity: "1", output_unit: "piece", target_margin: "30", is_intermediate: false, category_id: "", supplier_id: "", supplier_name: "", product_type: "" });
   };
 
   const handleFileUpload = async (event) => {
@@ -197,6 +207,7 @@ const Recipes = () => {
   const filteredRecipes = recipes.filter(r => {
     if (filterSupplier !== "all" && (r.supplier_name || "") !== filterSupplier) return false;
     if (filterVersion !== "all" && (r.version || 1).toString() !== filterVersion) return false;
+    if (filterProductType !== "all" && (r.product_type || "") !== filterProductType) return false;
     if (searchQuery && !r.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
@@ -204,7 +215,7 @@ const Recipes = () => {
   // Group by supplier
   const groupedBySupplier = {};
   filteredRecipes.forEach(r => {
-    const key = r.supplier_name || "Sans fournisseur";
+    const key = r.supplier_name || "Sans client";
     if (!groupedBySupplier[key]) groupedBySupplier[key] = [];
     groupedBySupplier[key].push(r);
   });
@@ -247,9 +258,9 @@ const Recipes = () => {
         <div className="flex items-center gap-2">
           <Funnel size={16} className="text-zinc-400" />
           <Select value={filterSupplier} onValueChange={setFilterSupplier}>
-            <SelectTrigger className="h-9 w-48" data-testid="filter-supplier"><SelectValue placeholder="Fournisseur" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-48" data-testid="filter-supplier"><SelectValue placeholder="Client" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tous les fournisseurs</SelectItem>
+              <SelectItem value="all">Tous les clients</SelectItem>
               {uniqueSuppliers.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -261,8 +272,15 @@ const Recipes = () => {
             {uniqueVersions.map(v => <SelectItem key={v} value={v}>v{v}</SelectItem>)}
           </SelectContent>
         </Select>
-        {(filterSupplier !== "all" || filterVersion !== "all" || searchQuery) && (
-          <Button variant="ghost" size="sm" onClick={() => { setFilterSupplier("all"); setFilterVersion("all"); setSearchQuery(""); }} data-testid="clear-filters">
+        <Select value={filterProductType} onValueChange={setFilterProductType}>
+          <SelectTrigger className="h-9 w-44" data-testid="filter-product-type"><SelectValue placeholder="Type produit" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les types</SelectItem>
+            {PRODUCT_TYPES.map(pt => <SelectItem key={pt.value} value={pt.value}>{pt.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {(filterSupplier !== "all" || filterVersion !== "all" || filterProductType !== "all" || searchQuery) && (
+          <Button variant="ghost" size="sm" onClick={() => { setFilterSupplier("all"); setFilterVersion("all"); setFilterProductType("all"); setSearchQuery(""); }} data-testid="clear-filters">
             Effacer les filtres
           </Button>
         )}
@@ -302,6 +320,7 @@ const Recipes = () => {
                   <tr className="bg-zinc-50 text-zinc-500 text-xs uppercase tracking-wider">
                     <th className="text-left py-3 px-4 font-medium">Recette</th>
                     <th className="text-center py-3 px-2 font-medium w-16">Version</th>
+                    <th className="text-center py-3 px-2 font-medium w-20">Type</th>
                     <th className="text-left py-3 px-2 font-medium">Categorie</th>
                     <th className="text-right py-3 px-2 font-medium">Quantite</th>
                     <th className="text-right py-3 px-3 font-medium">Prix revient</th>
@@ -327,6 +346,12 @@ const Recipes = () => {
                         </td>
                         <td className="text-center py-3 px-2">
                           <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-mono font-medium">v{recipe.version || 1}</span>
+                        </td>
+                        <td className="text-center py-3 px-2">
+                          {recipe.product_type ? (() => {
+                            const pt = PRODUCT_TYPES.find(p => p.value === recipe.product_type);
+                            return <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${pt?.color || "bg-zinc-100 text-zinc-600"}`}>{recipe.product_type}</span>;
+                          })() : <span className="text-zinc-300">-</span>}
                         </td>
                         <td className="py-3 px-2 text-zinc-500 text-xs">{getCategoryName(recipe.category_id) || "-"}</td>
                         <td className="text-right py-3 px-2 text-zinc-600">{recipe.output_quantity} {recipe.output_unit}</td>
@@ -387,12 +412,22 @@ const Recipes = () => {
                 <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Description de la recette..." rows={2} data-testid="recipe-description-input" />
               </div>
               <div className="space-y-2">
-                <Label>Fournisseur</Label>
+                <Label>Client</Label>
                 <Select value={formData.supplier_id || "none"} onValueChange={(v) => setFormData({ ...formData, supplier_id: v === "none" ? "" : v })}>
                   <SelectTrigger data-testid="recipe-supplier-select"><SelectValue placeholder="Aucun" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Aucun</SelectItem>
                     {suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Type de produit</Label>
+                <Select value={formData.product_type || "none"} onValueChange={(v) => setFormData({ ...formData, product_type: v === "none" ? "" : v })}>
+                  <SelectTrigger data-testid="recipe-product-type-select"><SelectValue placeholder="Aucun" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucun</SelectItem>
+                    {PRODUCT_TYPES.map((pt) => <SelectItem key={pt.value} value={pt.value}>{pt.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

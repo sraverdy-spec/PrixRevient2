@@ -3,7 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
   ArrowLeft, Plus, Trash, Calculator, Package, Clock, Gear,
-  FilePdf, TreeStructure, Percent, CurrencyCircleDollar, ArrowCounterClockwise, PencilSimple
+  FilePdf, TreeStructure, Percent, CurrencyCircleDollar, ArrowCounterClockwise, PencilSimple,
+  FloppyDisk, ClockCounterClockwise, FileXls, Camera
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -43,8 +44,14 @@ const RecipeDetail = () => {
   const [selectedOverheads, setSelectedOverheads] = useState([]);
   // Simulation en ligne : modifications temporaires
   const [simMode, setSimMode] = useState(false);
-  const [simIngredients, setSimIngredients] = useState({});  // { index: { quantity, unit_price, freinte } }
-  const [simLabor, setSimLabor] = useState({});  // { index: { hours, hourly_rate } }
+  const [simIngredients, setSimIngredients] = useState({});
+  const [simLabor, setSimLabor] = useState({});
+  // Simulation versions
+  const [simVersions, setSimVersions] = useState([]);
+  const [simLabel, setSimLabel] = useState("");
+  const [showSimVersions, setShowSimVersions] = useState(false);
+  // Photo
+  const [recipeImage, setRecipeImage] = useState(null);
 
   const fetchRecipe = useCallback(async () => {
     try {
@@ -73,15 +80,18 @@ const RecipeDetail = () => {
   const fetchIntermediateRecipes = async () => {
     try { setIntermediateRecipes((await axios.get(`${API}/recipes/intermediate`)).data); } catch {}
   };
+  const fetchSimVersions = useCallback(async () => {
+    try { setSimVersions((await axios.get(`${API}/recipes/${id}/simulations`)).data); } catch {}
+  }, [id]);
 
   useEffect(() => {
     const load = async () => {
-      await Promise.all([fetchRecipe(), fetchMaterials(), fetchOverheads(), fetchIntermediateRecipes()]);
+      await Promise.all([fetchRecipe(), fetchMaterials(), fetchOverheads(), fetchIntermediateRecipes(), fetchSimVersions()]);
       await fetchCostBreakdown();
       setLoading(false);
     };
     load();
-  }, [fetchRecipe, fetchCostBreakdown]);
+  }, [fetchRecipe, fetchCostBreakdown, fetchSimVersions]);
 
   const handleAddIngredient = async (e) => {
     e.preventDefault();
@@ -202,6 +212,38 @@ const RecipeDetail = () => {
   const resetSim = () => { setSimIngredients({}); setSimLabor({}); };
   const hasSimChanges = Object.keys(simIngredients).length > 0 || Object.keys(simLabor).length > 0;
 
+  const handleSaveSimVersion = async () => {
+    if (!hasSimChanges) { toast.error("Aucune modification a sauvegarder"); return; }
+    const costSummary = computeSimCost();
+    try {
+      await axios.post(`${API}/recipes/${id}/simulations`, {
+        label: simLabel || undefined,
+        sim_ingredients: simIngredients,
+        sim_labor: simLabor,
+        cost_summary: costSummary,
+      });
+      toast.success("Simulation sauvegardee");
+      setSimLabel("");
+      fetchSimVersions();
+    } catch { toast.error("Erreur sauvegarde"); }
+  };
+
+  const handleLoadSimVersion = (sim) => {
+    setSimIngredients(sim.sim_ingredients || {});
+    setSimLabor(sim.sim_labor || {});
+    setSimMode(true);
+    setShowSimVersions(false);
+    toast.success(`Simulation "${sim.label}" chargee`);
+  };
+
+  const handleDeleteSimVersion = async (simId) => {
+    try {
+      await axios.delete(`${API}/recipes/${id}/simulations/${simId}`);
+      toast.success("Version supprimee");
+      fetchSimVersions();
+    } catch { toast.error("Erreur"); }
+  };
+
   // Calcul live des coûts simulés
   const computeSimCost = () => {
     if (!recipe || !costBreakdown) return null;
@@ -254,6 +296,35 @@ const RecipeDetail = () => {
     toast.success("Generation du PDF en cours...");
   };
 
+  const handleExportExcel = () => {
+    window.open(`${API}/recipes/${id}/excel`, '_blank');
+    toast.success("Generation Excel en cours...");
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await axios.post(`${API}/recipes/${id}/image`, formData, { headers: { "Content-Type": "multipart/form-data" } });
+      setRecipeImage(res.data.image_url);
+      toast.success("Image mise a jour");
+      fetchRecipe();
+    } catch (err) { toast.error(err.response?.data?.detail || "Erreur upload"); }
+  };
+
+  const handleImageUrl = async () => {
+    const url = prompt("URL de l'image :");
+    if (!url) return;
+    try {
+      const res = await axios.post(`${API}/recipes/${id}/image-url`, { url });
+      setRecipeImage(res.data.image_url);
+      toast.success("Image mise a jour");
+      fetchRecipe();
+    } catch { toast.error("Erreur"); }
+  };
+
   if (loading) return <div className="flex items-center justify-center h-64" data-testid="recipe-detail-loading"><div className="text-zinc-500">Chargement...</div></div>;
   if (!recipe) return null;
 
@@ -295,23 +366,72 @@ const RecipeDetail = () => {
             </p>
           </div>
         </div>
-        <Button onClick={handleExportPdf} className="bg-[#EF4444] hover:bg-[#DC2626]" data-testid="export-pdf-btn">
-          <FilePdf size={20} className="mr-2" /> Exporter PDF
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={handleExportExcel} variant="outline" className="border-green-300 text-green-700 hover:bg-green-50" data-testid="export-excel-btn">
+            <FileXls size={20} className="mr-2" /> Excel
+          </Button>
+          <Button onClick={handleExportPdf} className="bg-[#EF4444] hover:bg-[#DC2626]" data-testid="export-pdf-btn">
+            <FilePdf size={20} className="mr-2" /> PDF
+          </Button>
+        </div>
       </div>
 
       {/* Cost Summary Cards */}
       {activeCost && (
         <div className="mb-8">
           {hasSimChanges && (
-            <div className="flex items-center justify-between mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <div className="flex items-center gap-2 text-amber-800">
-                <PencilSimple size={18} />
-                <span className="text-sm font-medium">Mode simulation active — Les valeurs ci-dessous sont recalculees en temps reel</span>
+            <div className="flex flex-col gap-2 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-amber-800">
+                  <PencilSimple size={18} />
+                  <span className="text-sm font-medium">Mode simulation active — Les valeurs ci-dessous sont recalculees en temps reel</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setShowSimVersions(!showSimVersions)} className="border-amber-300 text-amber-700 hover:bg-amber-100" data-testid="toggle-sim-versions-btn">
+                    <ClockCounterClockwise size={14} className="mr-1" /> Versions ({simVersions.length})
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={resetSim} className="border-amber-300 text-amber-700 hover:bg-amber-100" data-testid="reset-sim-btn">
+                    <ArrowCounterClockwise size={14} className="mr-1" /> Reinitialiser
+                  </Button>
+                </div>
               </div>
-              <Button size="sm" variant="outline" onClick={resetSim} className="border-amber-300 text-amber-700 hover:bg-amber-100" data-testid="reset-sim-btn">
-                <ArrowCounterClockwise size={14} className="mr-1" /> Reinitialiser
-              </Button>
+              {/* Save simulation */}
+              <div className="flex items-center gap-2 mt-1">
+                <Input placeholder="Nom de la version (optionnel)" value={simLabel} onChange={e => setSimLabel(e.target.value)}
+                  className="h-8 text-sm flex-1 max-w-xs" data-testid="sim-label-input" />
+                <Button size="sm" onClick={handleSaveSimVersion} className="bg-amber-600 hover:bg-amber-700 h-8" data-testid="save-sim-btn">
+                  <FloppyDisk size={14} className="mr-1" /> Sauvegarder cette version
+                </Button>
+              </div>
+              {/* Versions panel */}
+              {showSimVersions && simVersions.length > 0 && (
+                <div className="mt-2 border border-amber-200 rounded-lg bg-white overflow-hidden" data-testid="sim-versions-panel">
+                  <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 text-xs font-semibold text-amber-700">Versions sauvegardees</div>
+                  <div className="max-h-[200px] overflow-y-auto divide-y divide-amber-100">
+                    {simVersions.map(sim => (
+                      <div key={sim.id} className="flex items-center justify-between px-3 py-2 hover:bg-amber-50/50">
+                        <div>
+                          <p className="text-sm font-medium text-zinc-800">{sim.label}</p>
+                          <p className="text-[10px] text-zinc-400">{sim.created_at ? new Date(sim.created_at).toLocaleString("fr-FR") : ""} — {sim.created_by}</p>
+                          {sim.cost_summary && (
+                            <p className="text-[10px] text-amber-600 font-mono mt-0.5">
+                              Cout: {sim.cost_summary.cost_per_unit?.toFixed(2)} EUR/u · PV: {sim.cost_summary.suggested_price?.toFixed(2)} EUR
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleLoadSimVersion(sim)} data-testid={`load-sim-${sim.version}`}>
+                            Charger
+                          </Button>
+                          <button onClick={() => handleDeleteSimVersion(sim.id)} className="p-1 hover:bg-red-50 rounded">
+                            <Trash size={12} className="text-red-400" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4" data-testid="cost-summary-cards">
@@ -474,22 +594,61 @@ const RecipeDetail = () => {
                 {subRecipeIngredients.map((ing, index) => {
                   const subDetail = costBreakdown?.sub_recipe_details?.find(s => s.name === ing.material_name);
                   return (
-                    <div key={index} className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100" data-testid={`sub-recipe-row-${index}`}>
-                      <div className="flex items-center gap-3">
-                        <TreeStructure size={16} className="text-amber-600" />
-                        <div>
-                          <p className="font-medium text-zinc-900">{ing.material_name}</p>
-                          <p className="text-xs text-zinc-500">{ing.quantity} {ing.unit}</p>
+                    <div key={index} className="bg-amber-50 rounded-lg border border-amber-100 overflow-hidden" data-testid={`sub-recipe-row-${index}`}>
+                      <div className="flex items-center justify-between p-3">
+                        <div className="flex items-center gap-3">
+                          <TreeStructure size={16} className="text-amber-600" />
+                          <div>
+                            <p className="font-medium text-zinc-900">{ing.material_name}</p>
+                            <p className="text-xs text-zinc-500">{ing.quantity} {ing.unit}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {subDetail && (
+                            <span className="font-mono font-semibold text-amber-700">{subDetail.total_cost.toFixed(2)} EUR</span>
+                          )}
+                          <button onClick={() => handleRemoveIngredient((recipe.ingredients || []).indexOf(ing))} className="p-1 hover:bg-red-50 rounded">
+                            <Trash size={14} className="text-red-500" />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        {subDetail && (
-                          <span className="font-mono font-semibold text-amber-700">{subDetail.total_cost.toFixed(2)} EUR</span>
-                        )}
-                        <button onClick={() => handleRemoveIngredient((recipe.ingredients || []).indexOf(ing))} className="p-1 hover:bg-red-50 rounded">
-                          <Trash size={14} className="text-red-500" />
-                        </button>
-                      </div>
+                      {/* Detail des matieres du semi-fini */}
+                      {subDetail?.ingredients && subDetail.ingredients.length > 0 && (
+                        <div className="border-t border-amber-200 bg-white/70 px-4 py-2">
+                          <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider mb-1">Composition</p>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-zinc-400">
+                                <th className="text-left py-0.5 font-medium">Matiere</th>
+                                <th className="text-right py-0.5 font-medium">Qte</th>
+                                <th className="text-right py-0.5 font-medium">Prix/u</th>
+                                <th className="text-right py-0.5 font-medium">Freinte</th>
+                                <th className="text-right py-0.5 font-medium">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {subDetail.ingredients.map((subIng, si) => (
+                                <tr key={si} className="border-t border-amber-100/50">
+                                  <td className="py-1 text-zinc-700">
+                                    {subIng.is_sub_recipe && <TreeStructure size={10} className="inline mr-1 text-amber-500" />}
+                                    {subIng.name}
+                                  </td>
+                                  <td className="text-right py-1 font-mono text-zinc-600">{subIng.quantity} {subIng.unit}</td>
+                                  <td className="text-right py-1 font-mono text-zinc-600">{subIng.is_sub_recipe ? "-" : `${(subIng.unit_price || 0).toFixed(2)}`}</td>
+                                  <td className="text-right py-1">{subIng.freinte > 0 ? <span className="text-red-500">{subIng.freinte}%</span> : "-"}</td>
+                                  <td className="text-right py-1 font-mono font-medium text-zinc-800">{subIng.total_cost.toFixed(2)} EUR</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          {subDetail.labor_cost > 0 && (
+                            <div className="flex justify-between mt-1 pt-1 border-t border-amber-100">
+                              <span className="text-zinc-500">Main d'oeuvre semi-fini</span>
+                              <span className="font-mono font-medium text-[#10B981]">{subDetail.labor_cost.toFixed(2)} EUR</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -588,8 +747,37 @@ const RecipeDetail = () => {
           </div>
         </div>
 
-        {/* Right Column - Charts & Summary */}
+        {/* Right Column - Photo, Charts & Summary */}
         <div className="space-y-6">
+          {/* Recipe Photo */}
+          <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden" data-testid="recipe-photo-section">
+            {(recipe.image_url || recipeImage) ? (
+              <div className="relative group">
+                <img src={`${(recipe.image_url || recipeImage).startsWith('/api') ? process.env.REACT_APP_BACKEND_URL : ''}${recipe.image_url || recipeImage}`}
+                  alt={recipe.name} className="w-full h-48 object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
+                  <label className="cursor-pointer px-3 py-1.5 bg-white rounded-lg text-xs font-medium text-zinc-800 hover:bg-zinc-100">
+                    <Camera size={14} className="inline mr-1" /> Changer
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  </label>
+                  <button onClick={handleImageUrl} className="px-3 py-1.5 bg-white rounded-lg text-xs font-medium text-zinc-800 hover:bg-zinc-100">URL</button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 text-center">
+                <Camera size={32} className="mx-auto mb-2 text-zinc-300" />
+                <p className="text-sm text-zinc-500 mb-3">Photo de l'article fini</p>
+                <div className="flex items-center justify-center gap-2">
+                  <label className="cursor-pointer px-3 py-1.5 bg-zinc-100 rounded-lg text-xs font-medium text-zinc-700 hover:bg-zinc-200" data-testid="upload-photo-btn">
+                    <Camera size={14} className="inline mr-1" /> Importer
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  </label>
+                  <button onClick={handleImageUrl} className="px-3 py-1.5 bg-zinc-100 rounded-lg text-xs font-medium text-zinc-700 hover:bg-zinc-200" data-testid="url-photo-btn">URL</button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {pieData.length > 0 && (
             <div className="chart-container" data-testid="cost-pie-chart">
               <h3 className="chart-title">Repartition des couts</h3>

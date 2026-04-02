@@ -110,7 +110,7 @@ const Simulation = () => {
                 <thead>
                   <tr className="bg-zinc-50 text-zinc-500 text-xs uppercase tracking-wider">
                     <th className="text-left py-3 px-4 font-medium">Recette</th>
-                    <th className="text-left py-3 px-2 font-medium">Fournisseur</th>
+                    <th className="text-left py-3 px-2 font-medium">Client</th>
                     <th className="text-center py-3 px-2 font-medium">Ver.</th>
                     <th className="text-right py-3 px-3 font-medium">Cout actuel</th>
                     <th className="text-right py-3 px-3 font-medium">Nouveau cout</th>

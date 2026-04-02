@@ -39,7 +39,7 @@ export default function Dashboard() {
     { label: "Matieres premieres", value: stats?.total_materials || 0, icon: Package, gradient: "from-blue-500 to-blue-700", lightBg: "bg-blue-50", textAccent: "text-blue-600" },
     { label: "Recettes", value: stats?.total_recipes || 0, icon: CookingPot, gradient: "from-emerald-500 to-emerald-700", lightBg: "bg-emerald-50", textAccent: "text-emerald-600" },
     { label: "Frais generaux", value: stats?.total_overheads || 0, icon: Gear, gradient: "from-amber-500 to-amber-700", lightBg: "bg-amber-50", textAccent: "text-amber-600" },
-    { label: "Fournisseurs", value: stats?.total_suppliers || 0, icon: Truck, gradient: "from-violet-500 to-violet-700", lightBg: "bg-violet-50", textAccent: "text-violet-600" },
+    { label: "Clients", value: stats?.total_suppliers || 0, icon: Truck, gradient: "from-violet-500 to-violet-700", lightBg: "bg-violet-50", textAccent: "text-violet-600" },
     { label: "Cout moyen/unite", value: (stats?.avg_cost_per_unit || 0).toFixed(2) + " EUR", icon: Calculator, gradient: "from-rose-500 to-rose-700", lightBg: "bg-rose-50", textAccent: "text-rose-600" },
   ];
 

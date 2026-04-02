@@ -763,7 +763,7 @@ export default function Settings() {
                 <Lightning size={20} className="text-amber-500" /> Charger un jeu de donnees
               </h3>
               <p className="text-sm text-zinc-500 mb-4">
-                Insere des donnees d'exemple realistes : 8 categories, 6 fournisseurs, 18 matieres premieres,
+                Insere des donnees d'exemple realistes : 8 categories, 6 clients, 18 matieres premieres,
                 7 recettes (dont 2 sous-recettes), 5 frais generaux, 6 unites.
               </p>
               <p className="text-xs text-zinc-400 mb-4">Les donnees existantes ne sont pas ecrasees (insertion uniquement si absent).</p>
@@ -778,7 +778,7 @@ export default function Settings() {
                 <ArrowClockwise size={20} /> Reinitialiser les donnees
               </h3>
               <p className="text-sm text-zinc-500 mb-4">
-                Supprime toutes les donnees metier (matieres, recettes, categories, fournisseurs, frais, unites, sites, taches, imports, historiques, cles API).
+                Supprime toutes les donnees metier (matieres, recettes, categories, clients, frais, unites, sites, taches, imports, historiques, cles API).
               </p>
               <p className="text-xs text-red-500 font-medium mb-4">Les comptes utilisateurs et les parametres sont conserves.</p>
               {!confirmReset ? (

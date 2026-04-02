@@ -245,7 +245,7 @@ const Materials = () => {
                 <th>Unite</th>
                 <th className="text-right">Prix Unitaire</th>
                 <th className="text-right">Freinte %</th>
-                <th>Fournisseur</th>
+                <th>Fournisseur MP</th>
                 <th>Categorie</th>
                 <th className="text-right">Actions</th>
               </tr>
@@ -328,7 +328,7 @@ const Materials = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="supplier_name">Fournisseur</Label>
+                  <Label htmlFor="supplier_name">Fournisseur MP</Label>
                   {suppliers.length > 0 ? (
                     <Select value={formData.supplier_name} onValueChange={(v) => setFormData({ ...formData, supplier_name: v })}>
                       <SelectTrigger data-testid="material-supplier-select"><SelectValue placeholder="Choisir..." /></SelectTrigger>
@@ -338,7 +338,7 @@ const Materials = () => {
                       </SelectContent>
                     </Select>
                   ) : (
-                    <Input id="supplier_name" value={formData.supplier_name} onChange={(e) => setFormData({ ...formData, supplier_name: e.target.value })} placeholder="Nom du fournisseur" data-testid="material-supplier-input" />
+                    <Input id="supplier_name" value={formData.supplier_name} onChange={(e) => setFormData({ ...formData, supplier_name: e.target.value })} placeholder="Nom du fournisseur MP" data-testid="material-supplier-input" />
                   )}
                 </div>
                 <div className="space-y-2">

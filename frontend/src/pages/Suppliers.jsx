@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { Plus, Pencil, Trash, Truck } from "@phosphor-icons/react";
+import { Plus, Pencil, Trash, UserList } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,10 +53,10 @@ const Suppliers = () => {
     try {
       if (selectedSupplier) {
         await axios.put(`${API}/suppliers/${selectedSupplier.id}`, formData);
-        toast.success("Fournisseur mis à jour");
+        toast.success("Client mis à jour");
       } else {
         await axios.post(`${API}/suppliers`, formData);
-        toast.success("Fournisseur créé");
+        toast.success("Client cree");
       }
       setIsDialogOpen(false);
       resetForm();
@@ -69,7 +69,7 @@ const Suppliers = () => {
   const handleDelete = async () => {
     try {
       await axios.delete(`${API}/suppliers/${selectedSupplier.id}`);
-      toast.success("Fournisseur supprimé");
+      toast.success("Client supprime");
       setIsDeleteDialogOpen(false);
       fetchSuppliers();
     } catch (error) {
@@ -88,8 +88,8 @@ const Suppliers = () => {
     <div className="fade-in" data-testid="suppliers-page">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="page-title">Fournisseurs</h1>
-          <p className="page-subtitle">Gérez vos fournisseurs de matières premières</p>
+          <h1 className="page-title">Clients</h1>
+          <p className="page-subtitle">Gerez vos clients pour lesquels vous fabriquez</p>
         </div>
         <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="bg-[#002FA7] hover:bg-[#002482]" data-testid="add-supplier-btn">
           <Plus size={20} className="mr-2" /> Ajouter
@@ -98,9 +98,9 @@ const Suppliers = () => {
 
       {suppliers.length === 0 ? (
         <div className="empty-state bg-white border border-zinc-200 rounded-lg" data-testid="no-suppliers">
-          <Truck size={64} className="mx-auto mb-4 text-zinc-300" />
-          <p className="empty-state-title">Aucun fournisseur</p>
-          <p className="empty-state-text">Ajoutez vos fournisseurs pour les associer aux matières premières</p>
+          <UserList size={64} className="mx-auto mb-4 text-zinc-300" />
+          <p className="empty-state-title">Aucun client</p>
+          <p className="empty-state-text">Ajoutez vos clients pour les associer aux recettes</p>
         </div>
       ) : (
         <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden">
@@ -143,7 +143,7 @@ const Suppliers = () => {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{selectedSupplier ? "Modifier" : "Nouveau"} fournisseur</DialogTitle>
+            <DialogTitle>{selectedSupplier ? "Modifier" : "Nouveau"} client</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="space-y-4 py-4">
