@@ -259,6 +259,8 @@ class CostBreakdown(BaseModel):
     recipe_id: str
     recipe_name: str
     category_id: Optional[str] = None
+    supplier_name: Optional[str] = None
+    product_type: Optional[str] = None
     total_material_cost: float
     total_labor_cost: float
     total_overhead_cost: float
@@ -876,8 +878,11 @@ async def calculate_cost(recipe_id: str) -> CostBreakdown:
             cost = base_cost + freinte_add
             total_material_cost += cost
             total_freinte_cost += freinte_add
+            # Lookup code_article from raw_materials
+            mat_doc = await db.raw_materials.find_one({"id": ing.get('material_id')}, {"_id": 0, "code_article": 1})
             material_details.append({
                 "name": ing['material_name'],
+                "code_article": mat_doc.get('code_article', '') if mat_doc else '',
                 "quantity": ing['quantity'],
                 "unit": ing['unit'],
                 "unit_price": ing['unit_price'],
@@ -932,6 +937,8 @@ async def calculate_cost(recipe_id: str) -> CostBreakdown:
         recipe_id=recipe_id,
         recipe_name=recipe['name'],
         category_id=recipe.get('category_id'),
+        supplier_name=recipe.get('supplier_name', ''),
+        product_type=recipe.get('product_type', ''),
         total_material_cost=round(total_material_cost, 2),
         total_labor_cost=round(total_labor_cost, 2),
         total_overhead_cost=round(total_overhead_cost, 2),
@@ -1072,22 +1079,23 @@ async def export_recipe_excel(recipe_id: str):
     # Materials
     ws.cell(row=row, column=1, value="MATIERES PREMIERES").font = bold_font
     row += 1
-    for col, h in enumerate(["Matiere", "Quantite", "Unite", "Prix/u", "Freinte %", "Total"], 1):
+    for col, h in enumerate(["Code article", "Matiere", "Quantite", "Unite", "Prix/u", "Freinte %", "Total"], 1):
         c = ws.cell(row=row, column=col, value=h)
         c.font = header_font
         c.fill = header_fill
         c.border = border
     row += 1
     for m in cost.material_details:
-        ws.cell(row=row, column=1, value=m["name"]).border = border
-        ws.cell(row=row, column=2, value=m["quantity"]).border = border
-        ws.cell(row=row, column=3, value=m["unit"]).border = border
-        ws.cell(row=row, column=4, value=m["unit_price"]).border = border
-        ws.cell(row=row, column=5, value=m.get("freinte", 0)).border = border
-        ws.cell(row=row, column=6, value=m["total_cost"]).border = border
+        ws.cell(row=row, column=1, value=m.get("code_article", "")).border = border
+        ws.cell(row=row, column=2, value=m["name"]).border = border
+        ws.cell(row=row, column=3, value=m["quantity"]).border = border
+        ws.cell(row=row, column=4, value=m["unit"]).border = border
+        ws.cell(row=row, column=5, value=m["unit_price"]).border = border
+        ws.cell(row=row, column=6, value=m.get("freinte", 0)).border = border
+        ws.cell(row=row, column=7, value=m["total_cost"]).border = border
         row += 1
-    ws.cell(row=row, column=5, value="Sous-total:").font = bold_font
-    ws.cell(row=row, column=6, value=cost.total_material_cost).font = bold_font
+    ws.cell(row=row, column=6, value="Sous-total:").font = bold_font
+    ws.cell(row=row, column=7, value=cost.total_material_cost).font = bold_font
     row += 2
 
     # Sub-recipes
@@ -1143,7 +1151,7 @@ async def export_recipe_excel(recipe_id: str):
         row += 1
 
     # Column widths
-    for col_letter, width in [("A", 25), ("B", 12), ("C", 10), ("D", 12), ("E", 12), ("F", 12)]:
+    for col_letter, width in [("A", 14), ("B", 25), ("C", 10), ("D", 8), ("E", 12), ("F", 10), ("G", 12)]:
         ws.column_dimensions[col_letter].width = width
 
     buffer = BytesIO()
@@ -1747,12 +1755,12 @@ async def export_recipe_pdf(recipe_id: str):
     # Materials Table
     if cost.material_details:
         elements.append(Paragraph("1. MATIERES PREMIERES", heading_style))
-        mat_data = [["Matiere", "Qte", "Unite", "Prix/u", "Freinte", "Total"]]
+        mat_data = [["Code", "Matiere", "Qte", "Unite", "Prix/u", "Freinte", "Total"]]
         for mat in cost.material_details:
-            mat_data.append([mat['name'], f"{mat['quantity']}", mat['unit'], f"{mat['unit_price']:.2f} EUR",
+            mat_data.append([mat.get('code_article', ''), mat['name'], f"{mat['quantity']}", mat['unit'], f"{mat['unit_price']:.2f} EUR",
                            f"{mat.get('freinte', 0)}%", f"{mat['total_cost']:.2f} EUR"])
-        mat_data.append(["", "", "", "", "Sous-total:", f"{cost.total_material_cost:.2f} EUR"])
-        mat_table = Table(mat_data, colWidths=[4.5*cm, 2*cm, 1.5*cm, 2.5*cm, 2*cm, 3*cm])
+        mat_data.append(["", "", "", "", "", "Sous-total:", f"{cost.total_material_cost:.2f} EUR"])
+        mat_table = Table(mat_data, colWidths=[2*cm, 3.5*cm, 1.5*cm, 1.2*cm, 2.2*cm, 1.8*cm, 2.5*cm])
         mat_table.setStyle(TableStyle(table_base_style + [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#002FA7')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -1908,7 +1916,7 @@ async def export_all_costs_xlsx():
     for recipe in recipes:
         try:
             cost = await calculate_cost(recipe["id"])
-            rtype = "Semi-fini" if recipe.get("is_intermediate") else "Produit fini"
+            rtype = recipe.get("product_type", "") or ("SF" if recipe.get("is_intermediate") else "")
             values = [
                 recipe["name"], f"v{recipe.get('version', 1)}", recipe.get("supplier_name", ""),
                 rtype, recipe.get("output_quantity", 1), recipe.get("output_unit", "piece"),

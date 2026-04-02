@@ -54,8 +54,12 @@ export default function BOMTree() {
   const [expandedIds, setExpandedIds] = useState({});
   const [costPopup, setCostPopup] = useState(null);
   const [costLoading, setCostLoading] = useState(false);
+  const [materials, setMaterials] = useState([]);
 
-  useEffect(() => { fetchRecipes(); }, []);
+  useEffect(() => {
+    fetchRecipes();
+    axios.get(API + "/raw-materials").then(r => setMaterials(r.data)).catch(() => {});
+  }, []);
 
   const fetchRecipes = () => {
     axios.get(API + "/recipes")
@@ -110,6 +114,10 @@ export default function BOMTree() {
 
   const topLevel = recipes.filter(r => !r.is_intermediate);
   const intermediate = recipes.filter(r => r.is_intermediate);
+  const getCode = (materialId) => {
+    const m = materials.find(x => x.id === materialId);
+    return m?.code_article || "";
+  };
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="text-zinc-500">Chargement...</div></div>;
@@ -152,6 +160,9 @@ export default function BOMTree() {
           {r.is_intermediate && !isRoot && (
             <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-medium shrink-0">Semi-fini</span>
           )}
+          {r.product_type && isRoot && (
+            <span className={"text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 " + (isRoot ? "bg-white/20 text-white/90" : "bg-blue-100 text-blue-700")}>{r.product_type}</span>
+          )}
           {r.supplier_name && (
             <span className={"text-[10px] px-1.5 py-0.5 rounded shrink-0 " + (isRoot ? "bg-white/20 text-white/90" : "bg-zinc-100 text-zinc-500")}>{r.supplier_name}</span>
           )}
@@ -173,12 +184,14 @@ export default function BOMTree() {
 
     if (row.type === "raw") {
       const ing = row.ingredient;
+      const code = getCode(ing.material_id);
       let detail = ing.quantity + " " + (ing.unit || "");
       if (ing.freinte > 0) detail += " (" + ing.freinte + "% freinte)";
       return (
         <div key={"raw-" + idx} style={{ marginLeft: ml }} className="flex items-center gap-2 py-1.5 px-3 my-0.5 rounded-md bg-zinc-50 border border-zinc-200">
           <div className="w-1.5 h-1.5 rounded-full bg-zinc-300 shrink-0 -ml-4" />
           <Package size={14} className="text-zinc-400 shrink-0" />
+          {code && <span className="text-[10px] font-mono text-zinc-400 bg-zinc-100 px-1 py-0.5 rounded shrink-0">{code}</span>}
           <span className="text-sm text-zinc-700 truncate">{ing.material_name}</span>
           <span className="text-xs text-zinc-400 ml-auto shrink-0 font-mono">{detail}</span>
         </div>
@@ -324,6 +337,8 @@ export default function BOMTree() {
             <DialogTitle className="flex items-center gap-2">
               <Calculator size={20} className="text-[#002FA7]" />
               {costPopup ? costPopup.recipe_name : "Chargement..."}
+              {costPopup?.supplier_name && <span className="text-xs font-normal text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded">{costPopup.supplier_name}</span>}
+              {costPopup?.product_type && <span className="text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{costPopup.product_type}</span>}
             </DialogTitle>
           </DialogHeader>
           {costLoading ? (
@@ -387,7 +402,10 @@ export default function BOMTree() {
                   <div className="space-y-1">
                     {costPopup.material_details.map((m, i) => (
                       <div key={i} className="flex justify-between text-sm px-3 py-1.5 bg-zinc-50 rounded" data-testid={"cost-mat-" + i}>
-                        <span className="text-zinc-700">{m.name} <span className="text-zinc-400 text-xs">{m.quantity} {m.unit}</span></span>
+                        <span className="text-zinc-700">
+                          {m.code_article && <span className="text-[10px] font-mono text-zinc-400 mr-1">[{m.code_article}]</span>}
+                          {m.name} <span className="text-zinc-400 text-xs">{m.quantity} {m.unit}</span>
+                        </span>
                         <span className="font-mono text-zinc-900">{(m.total_cost || 0).toFixed(2)} EUR {(m.freinte_cost || 0) > 0 && <span className="text-amber-500 text-xs">(+{(m.freinte_cost).toFixed(2)} freinte)</span>}</span>
                       </div>
                     ))}
