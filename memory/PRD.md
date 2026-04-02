@@ -49,10 +49,40 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - last_status/last_result affiches avec badges couleur
 
 ### Phase 11 - Dashboard evolution prix + alertes (Complete - 1 Avril 2026)
-- [x] Graphique LineChart evolution des prix de revient sur 90 jours
-- [x] Donnees groupees par date, une ligne par recette
-- [x] Panneau alertes prix matieres (hausse/baisse avec pourcentage)
-- [x] Integration avec /api/price-history et /api/price-history/alerts
+- Graphique LineChart evolution des prix de revient sur 90 jours
+- Donnees groupees par date, une ligne par recette
+- Panneau alertes prix matieres (hausse/baisse avec pourcentage)
+- Integration avec /api/price-history et /api/price-history/alerts
+
+### Phase 12 - Documentation technique (Complete - 1 Avril 2026)
+- MODELE_DONNEES.md : schema complet des 14 collections MongoDB
+- Generation PDF et DOCX via generate_docs.py
+- 3 documents disponibles : Guide VPS, Documentation Metier, Modele de Donnees
+
+### Phase 13 - Tableau de bord Administration (Complete - 1 Avril 2026)
+- Endpoint /api/dashboard/admin-stats (admin only)
+- Section "Administration" dans Dashboard visible uniquement pour admins
+- 4 KPIs: Utilisateurs (par role), Imports (succes/erreur), Sites, Alertes stock
+- 3 panneaux: Recettes par categorie (BarChart), Derniers imports, Taches planifiees
+
+### Phase 14 - Jeu de donnees et console DB (Complete - 1 Avril 2026)
+- Endpoint /api/data/seed : 8 categories, 6 fournisseurs, 18 matieres, 7 recettes (2 sous-recettes), 5 frais, 6 unites
+- Endpoint /api/data/reset : reinitialise toutes les collections (garde users + settings)
+- Endpoint /api/data/query : console MongoDB (find, count, aggregate, distinct)
+- Nouvel onglet "Base de donnees" dans Parametres avec seed, reset, console requetes
+- ZIP deploiement mis a jour
+
+### Phase 15 - Renommage Clients + Types produit + Simulation versionnee + Photos (Complete - 2 Avril 2026)
+- Renommage "Fournisseurs" en "Clients" partout (frontend + seed)
+- Types produit (MDD, MN, SM, MP) sur recettes avec filtres
+- Simulation versionnee (sauvegarde/chargement)
+- Semi-finis editables dans la simulation
+- Photos recettes avec dimensions configurables (120x120 par defaut)
+- Correction bug texte blanc sur fond blanc pour anciennes recettes
+
+### Bugfix - code_article dans BOM Tree (Complete - 2 Avril 2026)
+- Corrige l'endpoint `/raw-materials` (inexistant) vers `/materials` dans BOMTree.jsx
+- Les codes articles (MAT-001, etc.) s'affichent maintenant correctement devant chaque matiere dans l'arbre BOM
 
 ## Credentials
 - Admin: admin@example.com / Admin123!
@@ -65,11 +95,11 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - /recipes : Recettes (tableau par fournisseur)
 - /recipes/:id : Detail recette (avec simulation live)
 - /overheads : Frais generaux
-- /suppliers : Fournisseurs (avec code)
+- /suppliers : Clients (avec code)
 - /categories : Categories
 - /costs-table : Tableau des couts + Export Excel
 - /comparison : Comparaison
-- /bom : Arbre de fabrication
+- /bom : Arbre de fabrication (avec code_article)
 - /simulation : Simulation what-if
 - /settings : Parametres (admin only, 8 onglets)
 
@@ -77,29 +107,11 @@ Application pour calculer le prix de revient d'un produit avec BOM, freinte, mai
 - raw_materials: {..., code_article}
 - suppliers: {..., code}
 - import_logs: {filename, type, status, user, error_details, timestamp, result}
-- recipes: {..., version, supplier_name}
+- recipes: {..., version, supplier_name, product_type, client}
 - api_keys: {key, name, created_by, is_active}
 - crontabs: {id, name, type, schedule, enabled, last_run, last_result, last_status, created_at}
 - price_history: {id, recipe_id, recipe_name, supplier_name, version, cost_per_unit, total_cost, recorded_at}
 - price_history_materials: {id, material_id, material_name, unit_price, supplier_name, recorded_at}
-
-### Phase 12 - Documentation technique (Complete - 1 Avril 2026)
-- [x] MODELE_DONNEES.md : schema complet des 14 collections MongoDB
-- [x] Generation PDF et DOCX via generate_docs.py
-- [x] 3 documents disponibles : Guide VPS, Documentation Metier, Modele de Donnees
-
-### Phase 13 - Tableau de bord Administration (Complete - 1 Avril 2026)
-- [x] Endpoint /api/dashboard/admin-stats (admin only)
-- [x] Section "Administration" dans Dashboard visible uniquement pour admins
-- [x] 4 KPIs: Utilisateurs (par role), Imports (succes/erreur), Sites, Alertes stock
-- [x] 3 panneaux: Recettes par categorie (BarChart), Derniers imports, Taches planifiees
-
-### Phase 14 - Jeu de donnees et console DB (Complete - 1 Avril 2026)
-- [x] Endpoint /api/data/seed : 8 categories, 6 fournisseurs, 18 matieres, 7 recettes (2 sous-recettes), 5 frais, 6 unites
-- [x] Endpoint /api/data/reset : reinitialise toutes les collections (garde users + settings)
-- [x] Endpoint /api/data/query : console MongoDB (find, count, aggregate, distinct)
-- [x] Nouvel onglet "Base de donnees" dans Parametres avec seed, reset, console requetes
-- [x] ZIP deploiement mis a jour
 
 ## Backlog
 - P2: Champ site_id sur recettes et matieres avec filtre par site

@@ -58,7 +58,7 @@ export default function BOMTree() {
 
   useEffect(() => {
     fetchRecipes();
-    axios.get(API + "/raw-materials").then(r => setMaterials(r.data)).catch(() => {});
+    axios.get(API + "/materials").then(r => setMaterials(r.data)).catch(() => {});
   }, []);
 
   const fetchRecipes = () => {
